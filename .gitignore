@@ -1,11 +1,3 @@
-out
-lib
+dist
 node_modules
-npm-debug.log
-*.tgz
-*.lsif
-*.db
-tsc-lsif/src/shared
-npm-lsif/src/shared
-lsif.json
-util/junit.xml
+yarn-error.log
