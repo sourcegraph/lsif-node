@@ -5,7 +5,6 @@
 import * as os from 'os';
 import { writeSync } from 'fs';
 
-const __stdout = process.stdout;
 const __eol = os.EOL;
 
 export interface Writer {
@@ -13,28 +12,6 @@ export interface Writer {
 	write(...data: string[]): void;
 	writeEOL(): void;
 	writeln(...data: string[]): void;
-}
-
-export class StdoutWriter implements Writer {
-	public constructor() {
-	}
-
-	write(...data: string[]): void {
-		for (let chunk of data) {
-			__stdout.write(chunk);
-		}
-	}
-
-	writeEOL(): void {
-		__stdout.write(__eol);
-	}
-
-	writeln(...data: string[]): void {
-		for (let chunk of data) {
-			__stdout.write(chunk);
-		}
-		__stdout.write(__eol);
-	}
 }
 
 export class FileWriter implements Writer{

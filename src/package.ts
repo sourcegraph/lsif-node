@@ -5,8 +5,8 @@
 
 import * as fs from 'fs';
 
-import * as Is from '../shared/is';
-import * as paths from '../shared/paths';
+import * as Is from './is';
+import * as paths from './paths';
 
 class PackageJson {
 	static read(filename: string): PackageJson | undefined {

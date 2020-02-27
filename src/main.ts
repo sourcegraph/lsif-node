@@ -3,7 +3,6 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import * as path from 'path';
-import * as uuid from 'uuid';
 import * as fs from 'fs';
 
 import * as minimist from 'minimist';
@@ -12,22 +11,23 @@ import * as ts from 'typescript-lsif';
 import * as tss from './typescripts';
 
 import { Id } from 'lsif-protocol';
-import { toolVersion } from '../shared/consts';
-import { Emitter, EmitterModule } from './emitters/emitter';
+import { toolVersion } from './consts';
+import { Emitter } from './emitter';
 import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
-import { Writer, StdoutWriter, FileWriter } from '../shared/writer';
+import { FileWriter } from './writer';
+import { create as createEmitter } from './emitter'
+import { ExportLinker, ImportLinker } from './linker';
+import PackageJson from './package';
 
 interface Options {
 	help: boolean;
 	version: boolean;
-	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
-	id: 'number' | 'uuid';
+	package?: string;
 	projectRoot: string | undefined;
 	noContents: boolean;
 	inferTypings: boolean;
-	out: string | undefined;
-	stdout: boolean;
+	out: string;
 }
 
 interface OptionDescription {
@@ -43,24 +43,20 @@ namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
-		outputFormat: 'line',
-		id: 'number',
+		package: undefined,
 		projectRoot: undefined,
 		noContents: false,
 		inferTypings: false,
-		out: undefined,
-		stdout: false
+		out: 'dump.lsif',
 	};
 	export const descriptions: OptionDescription[] = [
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
-		{ id: 'outputFormat', type: 'string', default: 'line', values: ['line', 'json'], description: 'Specifies the output format. Allowed values are: \'line\' and \'json\'.'},
-		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
+		{ id: 'package', type: 'string', default: undefined, description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.'},
 		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the current working directory.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
-		{ id: 'out', type: 'string', default: undefined, description: 'The output file the dump is save to.'},
-		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout.'}
+		{ id: 'out', type: 'string', default: 'dump.lsif', description: 'The output file the dump is save to.'},
 	];
 }
 
@@ -82,42 +78,14 @@ function loadConfigFile(file: string): ts.ParsedCommandLine {
 	return result;
 }
 
-function createEmitter(options: Options, writer: Writer, idGenerator: () => Id): Emitter {
-	let emitterModule: EmitterModule;
-	switch (options.outputFormat) {
-		case 'json':
-			emitterModule = require('./emitters/json');
-			break;
-		case 'line':
-			emitterModule = require('./emitters/line');
-			break;
-		case 'vis':
-			emitterModule = require('./emitters/vis');
-			break;
-		case 'graphSON':
-			emitterModule = require('./emitters/graphSON');
-			break;
-		default:
-			emitterModule = require('./emitters/json');
-	}
-	return emitterModule.create(writer, idGenerator);
-}
-
 function createIdGenerator(options: Options): () => Id {
-	switch (options.id) {
-		case 'uuid':
-			return () => {
-				return uuid.v4();
-			};
-		default:
-			let counter = 1;
-			return () => {
-				return counter++;
-			};
-	}
+	let counter = 1;
+	return () => {
+		return counter++;
+	};
 }
 
-async function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id, typingsInstaller: TypingsInstaller): Promise<ProjectInfo | undefined> {
+async function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id, importLinker: ImportLinker, exportLinker: ExportLinker | undefined, typingsInstaller: TypingsInstaller): Promise<ProjectInfo | undefined> {
 	let tsconfigFileName: string | undefined;
 	if (config.options.project) {
 		const projectPath = path.resolve(config.options.project);
@@ -213,7 +181,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const projectInfo = await processProject(reference.commandLine, options, emitter, idGenerator, typingsInstaller);
+				const projectInfo = await processProject(reference.commandLine, options, emitter, idGenerator, importLinker, exportLinker, typingsInstaller);
 				if (projectInfo !== undefined) {
 					dependsOn.push(projectInfo);
 				}
@@ -222,7 +190,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	}
 
 	program.getTypeChecker();
-	return lsif(languageService, options as VisitorOptions, dependsOn, emitter, idGenerator, tsconfigFileName);
+	return lsif(languageService, options as VisitorOptions, dependsOn, emitter, idGenerator, importLinker, exportLinker, tsconfigFileName);
 }
 
 async function run(this: void, args: string[]): Promise<void> {
@@ -253,7 +221,7 @@ async function run(this: void, args: string[]): Promise<void> {
 
 	let buffer: string[] = [];
 	if (options.help) {
-		buffer.push(`Languag Server Index Format tool for TypeScript`);
+		buffer.push(`Language Server Index Format tool for TypeScript`);
 		buffer.push(`Version: ${toolVersion}`);
 		buffer.push('');
 		buffer.push(`Usage: lsif-tsc [options][tsc options]`);
@@ -270,29 +238,34 @@ async function run(this: void, args: string[]): Promise<void> {
 		return;
 	}
 
-	let writer: Writer | undefined;
-	if (options.out) {
-		writer = new FileWriter(fs.openSync(options.out, 'w'));
-	} else if (options.stdout) {
-		writer = new StdoutWriter();
+	let packageFile: string | undefined = options.package;
+	if (packageFile === undefined) {
+		packageFile = 'package.json';
 	}
-
-	if (writer === undefined) {
-		console.log(`Either a output file using --out or --stdout must be specified.`);
+	packageFile = tss.makeAbsolute(packageFile);
+	const packageJson: PackageJson | undefined = PackageJson.read(packageFile);
+	let projectRoot = options.projectRoot;
+	if (projectRoot === undefined && packageFile !== undefined) {
+		projectRoot = path.posix.dirname(packageFile);
+		if (!path.isAbsolute(projectRoot)) {
+			projectRoot = tss.makeAbsolute(projectRoot);
+		}
+	}
+	if (projectRoot === undefined) {
 		process.exitCode = -1;
 		return;
 	}
 
+	let writer = new FileWriter(fs.openSync(options.out, 'w'));
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
-	const emitter = createEmitter(options, writer, idGenerator);
-	let projectRoot = options.projectRoot;
-	if (projectRoot !== undefined && !path.isAbsolute(projectRoot)) {
-		projectRoot = path.join(process.cwd(), projectRoot);
+	const emitter = createEmitter(writer);
+	const importLinker: ImportLinker = new ImportLinker(projectRoot, emitter, idGenerator);
+	let exportLinker: ExportLinker | undefined;
+	if (packageJson !== undefined) {
+		exportLinker = new ExportLinker(projectRoot, packageJson, emitter, idGenerator);
 	}
-	emitter.start();
-	await processProject(config, options, emitter, idGenerator, new TypingsInstaller());
-	emitter.end();
+	await processProject(config, options, emitter, idGenerator, importLinker, exportLinker, new TypingsInstaller());
 }
 
 export async function main(): Promise<void> {

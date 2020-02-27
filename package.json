@@ -12,8 +12,7 @@
     "url": "https://github.com/sourcegraph/lsif-node"
   },
   "bin": {
-    "lsif-tsc": "./bin/lsif-tsc",
-    "lsif-npm": "./bin/lsif-npm"
+    "lsif-tsc": "./bin/lsif-tsc"
   },
   "scripts": {
     "build": "node ./node_modules/typescript/bin/tsc -b ."

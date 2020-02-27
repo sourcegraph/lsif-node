@@ -12,14 +12,15 @@ import * as ts from 'typescript-lsif';
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Version, Range, EventKind, TypeDefinitionResult
+	Version, Range, EventKind, TypeDefinitionResult, Moniker
 } from 'lsif-protocol';
 
-import { toolVersion } from '../shared/consts';
+import { toolVersion } from './consts';
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
-import { Emitter } from './emitters/emitter';
+import { Emitter } from './emitter';
 import * as tss from './typescripts';
-import { LRUCache } from '../shared/linkedMap';
+import { LRUCache } from './linkedMap';
+import { ImportLinker, ExportLinker } from './linker';
 
 interface Disposable {
 	(): void;
@@ -343,10 +344,11 @@ abstract class SymbolData extends LSIFData {
 		this.emit(this.edge.hover(this.resultSet, hr));
 	}
 
-	public addMoniker(identifier: string, kind: MonikerKind): void {
+	public addMoniker(identifier: string, kind: MonikerKind): Moniker {
 		let moniker = this.vertex.moniker('tsc', identifier, kind);
 		this.emit(moniker);
 		this.emit(this.edge.moniker(this.resultSet, moniker));
+		return moniker
 	}
 
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
@@ -1314,7 +1316,6 @@ class TypeAliasResolver extends StandardResolver {
 export interface Options {
 	projectRoot: string;
 	noContents: boolean;
-	stdout: boolean;
 }
 
 export class DataManager implements SymbolDataContext {
@@ -1326,7 +1327,7 @@ export class DataManager implements SymbolDataContext {
 	private symbolDatas: Map<string, SymbolData | null>;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
-	public constructor(private context: EmitContext, project: Project, private options: Options) {
+	public constructor(private context: EmitContext, project: Project) {
 		this.projectData = new ProjectData(this, project);
 		this.projectData.begin();
 		this.documentStats = 0;
@@ -1365,10 +1366,8 @@ export class DataManager implements SymbolDataContext {
 			}
 		}
 		this.projectData.end();
-		if (!this.options.stdout) {
-			console.log('');
-			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
-		}
+		console.log('');
+		console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
 	}
 
 	public getDocumentData(fileName: string): DocumentData | undefined {
@@ -1520,7 +1519,7 @@ class Visitor implements ResolverContext {
 		typeAlias: TypeAliasResolver;
 	};
 
-	constructor(private languageService: ts.LanguageService, private options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
+	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, private importLinker: ImportLinker, private exportLinker: ExportLinker | undefined, tsConfigFile: string | undefined) {
 		this.program = languageService.getProgram()!;
 		this.typeChecker = this.program.getTypeChecker();
 		this.builder = new Builder({
@@ -1558,7 +1557,7 @@ class Visitor implements ResolverContext {
 		} else {
 			this.outDir = this.rootDir;
 		}
-		this.dataManager = new DataManager(this, this.project, options);
+		this.dataManager = new DataManager(this, this.project);
 		this.symbols = new Symbols(this.program, this.typeChecker);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
@@ -1651,9 +1650,7 @@ class Visitor implements ResolverContext {
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
-		if (!this.options.stdout) {
-			process.stdout.write('.');
-		}
+		process.stdout.write('.');
 
 		// things we need to capture to have correct exports
 		// `export =` or an `export default` declaration ==> ExportAssignment
@@ -2085,9 +2082,19 @@ class Visitor implements ResolverContext {
 			result.addMoniker(id, MonikerKind.local);
 		} else {
 			if (externalLibrary === true) {
-				result.addMoniker(monikerIdentifer, MonikerKind.import);
+				let moniker = result.addMoniker(monikerIdentifer, MonikerKind.import);
+				this.importLinker.handleMoniker(moniker);
 			} else {
+				// let moniker = 
 				result.addMoniker(monikerIdentifer, MonikerKind.export);
+				// if (this.exportLinker !== undefined) {
+				// 	this.exportLinker.handleMoniker(moniker);
+				// }
+			}
+
+			if (2<1) {
+				console.log(this.importLinker);
+				console.log(this.exportLinker);
 			}
 		}
 
@@ -2254,8 +2261,8 @@ class Visitor implements ResolverContext {
 }
 
 
-export function lsif(languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo | undefined {
-	let visitor = new Visitor(languageService, options, dependsOn, emitter, idGenerator, tsConfigFile);
+export function lsif(languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, importLinker: ImportLinker, exportLinker: ExportLinker | undefined, tsConfigFile: string | undefined): ProjectInfo | undefined {
+	let visitor = new Visitor(languageService, options, dependsOn, emitter, idGenerator, importLinker, exportLinker, tsConfigFile);
 	let result = visitor.visitProgram();
 	visitor.endVisitProgram();
 	return result;

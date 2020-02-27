@@ -13,12 +13,12 @@ npm install
 npm run compile
 ```
 
-This will populate the files library files referenced by the wrapper scripts `./tsc/bin/lsif-tsc` and `./npm/bin/lsif-npm`.
+This will populate the files library files referenced by the wrapper script `./tsc/bin/lsif-tsc`.
 
 ## Indexing your repository
 
 ```
-$ /path/to/lsif-node/tsc/bin/lsif-tsc --noContents -p . --stdout | /path/to/lsif-node/npm/bin/lsif-npm --stdin --out dump.lsif
+$ /path/to/lsif-node/tsc/bin/lsif-tsc --noContents -p .
 ```
 
 In order to work correctly with LSIF dump roots on a Sourcegraph instance, you should **always** `cd` into the project root and supply `projectRoot` as the current directory (`.`). Supplying a `projectRoot` value other than the current directory will cause a mismatch in document URIs that will be unresolvable at query time.
