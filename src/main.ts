@@ -19,13 +19,13 @@ import { FileWriter } from './writer';
 import { create as createEmitter } from './emitter'
 import { ExportLinker, ImportLinker } from './linker';
 import PackageJson from './package';
+import { execSync } from 'child_process';
 
 interface Options {
 	help: boolean;
 	version: boolean;
-	package?: string;
-	projectRoot: string | undefined;
-	noContents: boolean;
+	repositoryRoot: string;
+	addContents: boolean;
 	inferTypings: boolean;
 	out: string;
 }
@@ -43,20 +43,18 @@ namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
-		package: undefined,
-		projectRoot: undefined,
-		noContents: false,
-		inferTypings: false,
 		out: 'dump.lsif',
+		repositoryRoot: '',
+		addContents: false,
+		inferTypings: false,
 	};
 	export const descriptions: OptionDescription[] = [
-		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
-		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
-		{ id: 'package', type: 'string', default: undefined, description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.'},
-		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the current working directory.'},
-		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
+		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'Show help.'},
+		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'Show application version.'},
+		{ id: 'out', type: 'string', alias: 'o', default: 'dump.lsif', description: 'The output file.'},
+		{ id: 'repositoryRoot', type: 'string', default: '', description: 'Specifies the path of the current repository (inferred automatically via git).'},
+		{ id: 'addContents', type: 'boolean', default: false, description: 'Embed file contents into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
-		{ id: 'out', type: 'string', default: 'dump.lsif', description: 'The output file the dump is save to.'},
 	];
 }
 
@@ -78,14 +76,14 @@ function loadConfigFile(file: string): ts.ParsedCommandLine {
 	return result;
 }
 
-function createIdGenerator(options: Options): () => Id {
+function createIdGenerator(): () => Id {
 	let counter = 1;
 	return () => {
 		return counter++;
 	};
 }
 
-async function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id, importLinker: ImportLinker, exportLinker: ExportLinker | undefined, typingsInstaller: TypingsInstaller): Promise<ProjectInfo | undefined> {
+async function processProject(config: ts.ParsedCommandLine, options: Options, projectRoot: string, emitter: Emitter, idGenerator: () => Id, importLinker: ImportLinker, exportLinker: ExportLinker | undefined, typingsInstaller: TypingsInstaller): Promise<ProjectInfo | undefined> {
 	let tsconfigFileName: string | undefined;
 	if (config.options.project) {
 		const projectPath = path.resolve(config.options.project);
@@ -108,17 +106,12 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		return undefined;
 	}
 
-	if (options.projectRoot === undefined) {
-		options.projectRoot = process.cwd();
-	}
-	options.projectRoot = tss.makeAbsolute(options.projectRoot);
-
 	if (options.inferTypings) {
 		if (config.options.types !== undefined) {
 			const start = tsconfigFileName !== undefined ? tsconfigFileName : process.cwd();
-			await typingsInstaller.installTypings(options.projectRoot, start, config.options.types);
+			await typingsInstaller.installTypings(projectRoot, start, config.options.types);
 		} else {
-			await typingsInstaller.guessTypings(options.projectRoot, tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd());
+			await typingsInstaller.guessTypings(projectRoot, tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd());
 		}
 	}
 
@@ -181,7 +174,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const projectInfo = await processProject(reference.commandLine, options, emitter, idGenerator, importLinker, exportLinker, typingsInstaller);
+				const projectInfo = await processProject(reference.commandLine, options, projectRoot, emitter, idGenerator, importLinker, exportLinker, typingsInstaller);
 				if (projectInfo !== undefined) {
 					dependsOn.push(projectInfo);
 				}
@@ -190,7 +183,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	}
 
 	program.getTypeChecker();
-	return lsif(languageService, options as VisitorOptions, dependsOn, emitter, idGenerator, importLinker, exportLinker, tsconfigFileName);
+	return lsif(languageService, ({ ...options, projectRoot }) as VisitorOptions, dependsOn, emitter, idGenerator, importLinker, exportLinker, tsconfigFileName);
 }
 
 async function run(this: void, args: string[]): Promise<void> {
@@ -221,51 +214,47 @@ async function run(this: void, args: string[]): Promise<void> {
 
 	let buffer: string[] = [];
 	if (options.help) {
-		buffer.push(`Language Server Index Format tool for TypeScript`);
-		buffer.push(`Version: ${toolVersion}`);
+		buffer.push(`usage: lsif-tsc [options] [tsc options]`);
 		buffer.push('');
-		buffer.push(`Usage: lsif-tsc [options][tsc options]`);
+		buffer.push(`lsif-tsc is an LSIF indexer for TypeScript.`);
 		buffer.push('');
-		buffer.push(`Options`);
+		buffer.push(`Options:`);
 		for (let description of Options.descriptions) {
+			if (description.id == 'help') {
+				continue;
+			}
+
 			if (description.alias !== undefined) {
-				buffer.push(`  -${description.alias} --${description.id}${' '.repeat(longestId - description.id.length)} ${description.description}`);
+				buffer.push(`  -${description.alias}, --${description.id}${' '.repeat(longestId - description.id.length)}  ${description.description}`);
 			} else {
-				buffer.push(`  --${description.id}   ${' '.repeat(longestId - description.id.length)} ${description.description}`);
+				buffer.push(`      --${description.id}${' '.repeat(longestId - description.id.length)}  ${description.description}`);
 			}
 		}
 		console.log(buffer.join('\n'));
 		return;
 	}
 
-	let packageFile: string | undefined = options.package;
-	if (packageFile === undefined) {
-		packageFile = 'package.json';
-	}
+	let packageFile = 'package.json';
 	packageFile = tss.makeAbsolute(packageFile);
 	const packageJson: PackageJson | undefined = PackageJson.read(packageFile);
-	let projectRoot = options.projectRoot;
-	if (projectRoot === undefined && packageFile !== undefined) {
-		projectRoot = path.posix.dirname(packageFile);
-		if (!path.isAbsolute(projectRoot)) {
-			projectRoot = tss.makeAbsolute(projectRoot);
-		}
+
+	const projectRoot = tss.makeAbsolute(path.posix.dirname(packageFile));
+
+	if (options.repositoryRoot === '') {
+		options.repositoryRoot = execSync('git rev-parse --show-toplevel').toString().trimRight()
 	}
-	if (projectRoot === undefined) {
-		process.exitCode = -1;
-		return;
-	}
+	options.repositoryRoot = tss.makeAbsolute(options.repositoryRoot);
 
 	let writer = new FileWriter(fs.openSync(options.out, 'w'));
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
-	const idGenerator = createIdGenerator(options);
+	const idGenerator = createIdGenerator();
 	const emitter = createEmitter(writer);
 	const importLinker: ImportLinker = new ImportLinker(projectRoot, emitter, idGenerator);
 	let exportLinker: ExportLinker | undefined;
 	if (packageJson !== undefined) {
 		exportLinker = new ExportLinker(projectRoot, packageJson, emitter, idGenerator);
 	}
-	await processProject(config, options, emitter, idGenerator, importLinker, exportLinker, new TypingsInstaller());
+	await processProject(config, options, projectRoot, emitter, idGenerator, importLinker, exportLinker, new TypingsInstaller());
 }
 
 export async function main(): Promise<void> {

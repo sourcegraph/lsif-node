@@ -482,9 +482,9 @@ class StandardSymbolData extends SymbolData {
 				// so that it can be referenced freely.
 				return false;
 			}
-			if (this.partitions.size !== 1) {
-				throw new Error(`Local Symbol data has more than one partition.`);
-			}
+			// if (this.partitions.size !== 1) {
+			// 	throw new Error(`Local Symbol data has more than one partition.`);
+			// }
 			this.end();
 			return true;
 		} else if (ts.isSourceFile(node)) {
@@ -1102,7 +1102,7 @@ abstract class SymbolDataResolver {
 
 	public getPartitionScope(sourceFiles: ts.SourceFile[]): ts.SourceFile {
 		if (sourceFiles.length === 0) {
-			throw new Error(`No soure file selection provided`);
+			throw new Error(`No source file selection provided`);
 		}
 		return sourceFiles[0];
 	}
@@ -1315,7 +1315,8 @@ class TypeAliasResolver extends StandardResolver {
 
 export interface Options {
 	projectRoot: string;
-	noContents: boolean;
+	repositoryRoot: string;
+	addContents: boolean;
 }
 
 export class DataManager implements SymbolDataContext {
@@ -1325,6 +1326,7 @@ export class DataManager implements SymbolDataContext {
 	private documentDatas: Map<string, DocumentData | null>;
 	private symbolStats: number;
 	private symbolDatas: Map<string, SymbolData | null>;
+	private started: Date;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
 	public constructor(private context: EmitContext, project: Project) {
@@ -1332,6 +1334,7 @@ export class DataManager implements SymbolDataContext {
 		this.projectData.begin();
 		this.documentStats = 0;
 		this.symbolStats = 0;
+		this.started = new Date();
 		this.documentDatas = new Map();
 		this.symbolDatas = new Map();
 		this.clearOnNode = new Map();
@@ -1367,7 +1370,10 @@ export class DataManager implements SymbolDataContext {
 		}
 		this.projectData.end();
 		console.log('');
-		console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
+
+		let elapsed = new Date().getTime() - this.started.getTime();
+		console.log(`${this.documentStats} file(s), ${this.symbolStats} symbol(s)`)
+		console.log(`Processed in ${elapsed / 1000}s`)
 	}
 
 	public getDocumentData(fileName: string): DocumentData | undefined {
@@ -1500,6 +1506,7 @@ class Visitor implements ResolverContext {
 	private builder: Builder;
 	private project: Project;
 	private projectRoot: string;
+	private repositoryRoot: string;
 	private rootDir: string;
 	private outDir: string;
 	private dependentOutDirs: string[];
@@ -1524,7 +1531,7 @@ class Visitor implements ResolverContext {
 		this.typeChecker = this.program.getTypeChecker();
 		this.builder = new Builder({
 			idGenerator,
-			emitSource: !options.noContents
+			emitSource: options.addContents
 		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
@@ -1536,12 +1543,13 @@ class Visitor implements ResolverContext {
 			return b.length - a.length;
 		});
 		this.projectRoot = options.projectRoot;
+		this.repositoryRoot = options.repositoryRoot;
 		const toolInfo = {
 			name: 'lsif-tsc',
 			version: toolVersion,
 			args: ts.sys.args,
 		}
-		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true), toolInfo));
+		this.emit(this.vertex.metaData(Version, URI.file(this.repositoryRoot).toString(true), toolInfo));
 		this.project = this.vertex.project();
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
