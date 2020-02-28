@@ -4,18 +4,23 @@
   "description": "A tool to create an LSIF dump for TypeScript projects.",
   "sideEffects": false,
   "publisher": "sourcegraph",
-  "version": "0.5.1",
+  "version": "0.5.3",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/sourcegraph/lsif-node"
   },
-  "main": "./src/main.ts",
+  "main": "./dist/src/main.js",
   "bin": {
-    "lsif-tsc": "./src/main.ts"
+    "lsif-tsc": "./dist/src/main.js"
   },
+  "files": [
+    "dist/",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "node ./node_modules/typescript/bin/tsc -b ."
+    "build": "node ./node_modules/typescript/bin/tsc -b .",
+    "prepare": "yarn run build"
   },
   "dependencies": {
     "lsif-protocol": "0.4.3",
