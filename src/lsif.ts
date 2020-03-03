@@ -2093,16 +2093,10 @@ class Visitor implements ResolverContext {
 				let moniker = result.addMoniker(monikerIdentifer, MonikerKind.import);
 				this.importLinker.handleMoniker(moniker);
 			} else {
-				// let moniker = 
-				result.addMoniker(monikerIdentifer, MonikerKind.export);
-				// if (this.exportLinker !== undefined) {
-				// 	this.exportLinker.handleMoniker(moniker);
-				// }
-			}
-
-			if (2<1) {
-				console.log(this.importLinker);
-				console.log(this.exportLinker);
+				let moniker = result.addMoniker(monikerIdentifer, MonikerKind.export);
+				if (this.exportLinker !== undefined) {
+					this.exportLinker.handleMoniker(moniker);
+				}
 			}
 		}
 
