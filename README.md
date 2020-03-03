@@ -2,10 +2,6 @@
 
 Visit https://lsif.dev/ to learn about LSIF.
 
-## Prerequisites
-
-- [Node.js](https://nodejs.org/en/) at least `10.x.x`
-
 ## Installation
 
 ```

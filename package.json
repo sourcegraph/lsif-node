@@ -8,7 +8,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sourcegraph/lsif-node"
+    "url": "github:sourcegraph/lsif-node"
+  },
+  "engines": {
+    "node": ">=10.0.0"
   },
   "main": "./dist/src/main.js",
   "bin": {
