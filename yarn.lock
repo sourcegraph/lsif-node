@@ -42,10 +42,10 @@
   dependencies:
     esquery "^1.0.1"
 
-"@sourcegraph/eslint-config@0.9.2":
-  version "0.9.2"
-  resolved "https://registry.yarnpkg.com/@sourcegraph/eslint-config/-/eslint-config-0.9.2.tgz#5764d96bbb4272da77bb163abfc368c4bab2dddd"
-  integrity sha512-DmhvR5pNy49Zxec4IinI1afYOpOdjdZp09q3whvjiooIJ1a1M7rDj5Ac9oyv3kDVs0NZkQefaHZHMAGcGQtkmg==
+"@sourcegraph/eslint-config@0.9.4":
+  version "0.9.4"
+  resolved "https://registry.yarnpkg.com/@sourcegraph/eslint-config/-/eslint-config-0.9.4.tgz#7bd1dae4e87ce9929c28be04bc6e13ba55b860f5"
+  integrity sha512-M/fZWiHCzhN7sb8NvAfA8H7d8iTpo4uZkd2+d0qk9bRwvHhW8mOTHYUQUEf/YeHPmgOyDte42mHzd6QEzYSwNQ==
   dependencies:
     "@sourcegraph/prettierrc" "^3.0.2"
     "@typescript-eslint/eslint-plugin" "^2.22.0"
