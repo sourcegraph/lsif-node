@@ -26,6 +26,7 @@
     "prepare": "yarn run build"
   },
   "dependencies": {
+    "lru-cache": "^5.1.1",
     "lsif-protocol": "0.4.3",
     "minimist": "^1.2.0",
     "npm": "^6.10.3",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@sourcegraph/tsconfig": "^4.0.0",
+    "@types/lru-cache": "^5.1.0",
     "@types/minimist": "^1.2.0",
     "@types/node": "13.7.4",
     "@types/npm": "^2.0.30",

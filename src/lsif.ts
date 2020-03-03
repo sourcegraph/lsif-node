@@ -8,6 +8,7 @@ import * as path from 'path';
 
 import { URI } from 'vscode-uri';
 import * as ts from 'typescript-lsif';
+import * as LRUCache from 'lru-cache'
 
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
@@ -19,7 +20,6 @@ import { toolVersion } from './consts';
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 import { Emitter } from './emitter';
 import * as tss from './typescripts';
-import { LRUCache } from './linkedMap';
 import { ImportLinker, ExportLinker } from './linker';
 
 interface Disposable {
