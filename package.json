@@ -22,6 +22,10 @@
     "LICENSE"
   ],
   "scripts": {
+    "prettier": "prettier --write --list-different '**/*.{ts,js?(on),md,yml}'",
+    "prettier-check": "yarn run prettier --write=false",
+    "tslint": "tslint -p tsconfig.json --format stylish",
+    "eslint": "eslint --cache '**/*.ts?(x)'",
     "build": "node ./node_modules/typescript/bin/tsc -b .",
     "prepare": "yarn run build"
   },
@@ -35,13 +39,19 @@
     "vscode-uri": "^2.0.2"
   },
   "devDependencies": {
-    "@sourcegraph/tsconfig": "^4.0.0",
+    "@sourcegraph/eslint-config": "0.9.2",
+    "@sourcegraph/prettierrc": "3.0.2",
+    "@sourcegraph/tsconfig": "4.0.0",
+    "@sourcegraph/tslint-config": "13.4.0",
     "@types/lru-cache": "^5.1.0",
     "@types/minimist": "^1.2.0",
     "@types/node": "13.7.4",
     "@types/npm": "^2.0.30",
     "@types/uuid": "^3.4.4",
+    "eslint": "6.8.0",
+    "prettier": "1.19.1",
     "ts-node": "^8.6.2",
+    "tslint": "5.20.1",
     "typescript": "^3.7.5"
   }
 }
