@@ -39,7 +39,7 @@
     "vscode-uri": "^2.0.2"
   },
   "devDependencies": {
-    "@sourcegraph/eslint-config": "0.9.2",
+    "@sourcegraph/eslint-config": "0.9.4",
     "@sourcegraph/prettierrc": "3.0.2",
     "@sourcegraph/tsconfig": "4.0.0",
     "@sourcegraph/tslint-config": "13.4.0",
