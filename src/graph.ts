@@ -16,6 +16,7 @@ import {
 	Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, DocumentEvent, ProjectEvent,
 	DeclarationResult, textDocument_declaration, next
 } from 'lsif-protocol';
+import { makeAbsolute } from './typescripts';
 
 export interface BuilderOptions {
 	idGenerator?: () => Id;
@@ -88,7 +89,7 @@ export class VertexBuilder {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.document,
-			uri: URI.file(path).toString(true),
+			uri: URI.file(makeAbsolute(path)).toString(true),
 			languageId: 'typescript'
 		};
 		if (contents) {
