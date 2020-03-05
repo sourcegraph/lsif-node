@@ -716,10 +716,6 @@ class AliasedSymbolData extends StandardSymbolData {
       .getOrCreatePartition(sourceFile)
       .addReference(reference as any, property as any)
   }
-
-  public getOrCreateReferenceResult(): ReferenceResult {
-    throw new Error(`Shouldn't be called`)
-  }
 }
 
 class MethodSymbolData extends StandardSymbolData {
