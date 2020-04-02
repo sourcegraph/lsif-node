@@ -139,7 +139,7 @@ export function flattenDiagnosticMessageText(
   while (diagnosticChains.length > 0) {
     const diagnosticChain = diagnosticChains.shift()
 
-    while (diagnosticChain){
+    if (diagnosticChain) {
       if (indent) {
         result += newLine
 
