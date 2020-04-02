@@ -2220,18 +2220,26 @@ class Visitor implements ResolverContext {
         sourceFileSymbol !== undefined
       ) {
         if (node.exportClause !== undefined) {
-          for (let element of node.exportClause.elements) {
+          function isNamedExports(bindings: ts.NamedExportBindings): bindings is ts.NamedExports {
+            return 'elements' in bindings
+          }
+
+          const elements = isNamedExports(node.exportClause)
+            ? node.exportClause.elements
+            : [{ name: node.exportClause.name, propertyName: undefined }]
+
+          for (let {name, propertyName} of elements) {
             let exportSymbol = this.typeChecker.getSymbolAtLocation(
-              element.name
+              name
             )
             if (exportSymbol === undefined) {
               continue
             }
             processSymbol(disposables, sourceFileSymbol, exportSymbol)
             let localSymbol: ts.Symbol | undefined
-            if (element.propertyName !== undefined) {
+            if (propertyName !== undefined) {
               localSymbol = this.typeChecker.getSymbolAtLocation(
-                element.propertyName
+                propertyName
               )
             } else if (tss.isAliasSymbol(exportSymbol)) {
               localSymbol = this.typeChecker.getAliasedSymbol(exportSymbol)
