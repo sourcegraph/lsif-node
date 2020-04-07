@@ -130,12 +130,16 @@ export function flattenDiagnosticMessageText(
 ): string {
   if (Is.string(messageText)) {
     return messageText
-  } else {
-    let diagnosticChain = messageText
-    let result = ''
+  }
 
-    let indent = 0
-    while (diagnosticChain) {
+  let diagnosticChains = [messageText]
+  let result = ''
+
+  let indent = 0
+  while (diagnosticChains.length > 0) {
+    const diagnosticChain = diagnosticChains.shift()
+
+    if (diagnosticChain) {
       if (indent) {
         result += newLine
 
@@ -145,10 +149,10 @@ export function flattenDiagnosticMessageText(
       }
       result += diagnosticChain.messageText
       indent++
-      diagnosticChain = diagnosticChain.next
+      diagnosticChains = diagnosticChains.concat(diagnosticChain.next)
     }
-    return result
   }
+  return result
 }
 
 interface InternalSymbol extends ts.Symbol {
