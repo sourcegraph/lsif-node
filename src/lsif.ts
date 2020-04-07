@@ -2738,7 +2738,7 @@ class Visitor implements ResolverContext {
     let monikerIdentifer: string | undefined
     if (tss.isSourceFile(symbol) && monikerPath !== undefined) {
       monikerIdentifer = tss.createMonikerIdentifier(monikerPath, undefined)
-    } else if (exportPath !== undefined) {
+    } else if (exportPath !== undefined && exportPath !== '') {
       monikerIdentifer = tss.createMonikerIdentifier(monikerPath, exportPath)
     }
     if (monikerIdentifer === undefined) {
