@@ -33,8 +33,9 @@ deploy:
     - docker build -t ${DOCKER_TAG} --build-arg TAG=${TRAVIS_TAG} .
     # - docker push ${DOCKER_TAG}
   on:
-    branches:
-      only:
-        - garo/ci-releases #master
+    all_branches: true
+    # branches:
+      # only:
+      #   - master
       # tag: true
       # condition: tag =~ ^v AND fork = false
