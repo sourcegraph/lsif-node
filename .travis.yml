@@ -27,6 +27,7 @@ branches:
 deploy:
   provider: script
   script:
+    - yarn install
     - npm publish --dry-run
     - echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin
     - docker build -t ${DOCKER_TAG} --build-arg TAG=${TRAVIS_TAG} .
