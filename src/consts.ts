@@ -1,1 +1,2 @@
-export const toolVersion = '0.6.0'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+export const toolVersion = require('../package.json').version

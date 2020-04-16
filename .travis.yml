@@ -1,0 +1,37 @@
+language: node_js
+node_js: '13'
+cache: yarn
+
+env:
+  - DOCKER_TAG=sourcegraph/lsif-node:${TRAVIS_TAG}
+
+install:
+  - yarn
+
+jobs:
+  include:
+    - stage: test
+      script:
+        - yarn run build
+
+stages:
+  - test
+
+branches:
+  only:
+    - master
+
+deploy:
+  provider: script
+  script:
+    - yarn run build
+    - npm publish
+    - echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin
+    - docker build -t ${DOCKER_TAG} --build-arg TAG=${TRAVIS_TAG} .
+    - docker push ${DOCKER_TAG}
+  on:
+    branches:
+      only:
+        - master
+      tag: true
+      condition: tag =~ ^v AND fork = false
