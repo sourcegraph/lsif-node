@@ -22,7 +22,7 @@ stages:
 
 branches:
   only:
-    - garo/ci-releases #master
+    - garo/ci-releases # master
 
 deploy:
   provider: script
