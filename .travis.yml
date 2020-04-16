@@ -29,6 +29,4 @@ stages:
   - name: release
     # if: tag =~ ^v AND fork = false
 
-branches:
-  only:
-    - garo/ci-releases
+all_branches: true
