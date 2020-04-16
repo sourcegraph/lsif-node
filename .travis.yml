@@ -16,26 +16,19 @@ jobs:
     - stage: test
       script:
         - yarn run build
+    - stage: release
+      script:
+        - yarn run build
+        - npm publish --dry-run
+        - echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin
+        - docker build -t ${DOCKER_TAG} --build-arg TAG=${TRAVIS_TAG} .
+        # - docker push ${DOCKER_TAG}
 
 stages:
   - test
+  - name: release
+    # if: tag =~ ^v AND fork = false
 
 branches:
   only:
-    - garo/ci-releases # master
-
-deploy:
-  provider: script
-  script:
-    - yarn install
-    - npm publish --dry-run
-    - echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin
-    - docker build -t ${DOCKER_TAG} --build-arg TAG=${TRAVIS_TAG} .
-    # - docker push ${DOCKER_TAG}
-  on:
-    all_branches: true
-    # branches:
-      # only:
-      #   - master
-      # tag: true
-      # condition: tag =~ ^v AND fork = false
+    - garo/ci-releases
