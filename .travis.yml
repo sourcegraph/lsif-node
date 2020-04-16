@@ -2,6 +2,9 @@ language: node_js
 node_js: '13'
 cache: yarn
 
+services:
+  - docker
+
 env:
   - DOCKER_TAG=sourcegraph/lsif-node:${TRAVIS_TAG}
 
