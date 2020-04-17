@@ -5,12 +5,12 @@ services:
 - docker
 env:
   global:
-  - TEST_TAG=v0.6.0
-  - DOCKER_REPO=sourcegraph/lsif-node
-  - VERSION_SEGMENTS=${TEST_TAG//./ }
-  - MAJOR=${VERISON_SEGMENTS[0]}
-  - MINOR=${VERSION_SEGMENTS[1]}
-  - PATCH=${VERSION_SEGMENTS[2]}
+  - TEST_TAG='v0.6.0'
+  - DOCKER_REPO='sourcegraph/lsif-node'
+  - VERSION_SEGMENTS="${TEST_TAG//./ }"
+  - MAJOR="${VERISON_SEGMENTS[0]}"
+  - MINOR="${VERSION_SEGMENTS[1]}"
+  - PATCH="${VERSION_SEGMENTS[2]}"
 install:
 - yarn
 jobs:
@@ -24,8 +24,8 @@ jobs:
     - npm publish --dry-run
   - stage: docker_push
     script:
-    - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
-    - docker build -t $DOCKER_REPO:latest -t $DOCKER_REPO:$MAJOR -t $DOCKER_REPO:$MAJOR.$MINOR -t $DOCKER_REPO:$MAJOR.$MINOR.$PATCH --build-arg TAG=v0.6.0 .
+    - docker login -u sourcegraphci -p "$DOCKER_PASSWORD"
+    - docker build -t "$DOCKER_REPO:latest" -t "$DOCKER_REPO:$MAJOR" -t "$DOCKER_REPO:$MAJOR.$MINOR" -t "$DOCKER_REPO:$MAJOR.$MINOR.$PATCH" --build-arg TAG="v0.6.0" .
     #- docker push sourcegraph/lsif-node
 stages:
 - test
