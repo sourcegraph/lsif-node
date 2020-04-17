@@ -6,7 +6,7 @@ services:
   - docker
 
 env:
-  - DOCKER_TAG=sourcegraph/lsif-node:0.0.0
+  - DOCKER_TAG=sourcegraph/lsif-node:0.6.0
 
 install:
   - yarn
@@ -16,17 +16,22 @@ jobs:
     - stage: test
       script:
         - yarn run build
-    - stage: release
+    - stage: npm_publish
       script:
         - yarn run build
         - npm publish --dry-run
-        - echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin
-        - docker build -t ${DOCKER_TAG} --build-arg TAG=0.0.0 .
+    - stage: docker_push
+      script:
+        - docker login -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}
+        - docker build -t ${DOCKER_TAG} --build-arg TAG=0.6.0 .
         # - docker push ${DOCKER_TAG}
+
 
 stages:
   - test
-  - name: release
+  - name: npm_publish
+    # if: tag =~ ^v AND fork = false
+  - name: docker_push
     # if: tag =~ ^v AND fork = false
 
 branches:
