@@ -24,6 +24,7 @@ jobs:
     script: yarn run build
     deploy:
       provider: npm
+      email: dev@sourcegraph.com
       api_key: "$NPM_TOKEN"
       on:
         all_branches: true
