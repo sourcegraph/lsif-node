@@ -26,7 +26,7 @@ jobs:
     - npm publish --dry-run
   - stage: docker_push
     script:
-    - docker login -u sourcegraphci -p ${DOCKER_PASSWORD}
+    - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
     - docker build -t $DOCKER_REPO:latest -t $DOCKER_REPO:$MAJOR -t $DOCKER_REPO:$MAJOR.$MINOR -t $DOCKER_REPO:$MAJOR.$MINOR.$PATCH --build-arg TAG=v0.6.0 .
     #- docker push sourcegraph/lsif-node
 stages:
