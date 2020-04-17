@@ -22,6 +22,7 @@ jobs:
     script:
     - yarn run build
     - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
+    - npm init --scope=@sourcegraph
     - npm publish --access public
   - stage: docker_push
     script:
