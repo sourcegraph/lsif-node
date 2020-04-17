@@ -6,7 +6,8 @@ services:
   - docker
 
 env:
-  - DOCKER_TAG=sourcegraph/lsif-node:${TRAVIS_TAG}
+  - TEST_TAG=0.0.0
+  - DOCKER_TAG=sourcegraph/lsif-node:${TEST_TAG}
 
 install:
   - yarn
@@ -21,7 +22,7 @@ jobs:
         - yarn run build
         - npm publish --dry-run
         - echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin
-        - docker build -t ${DOCKER_TAG} --build-arg TAG=${TRAVIS_TAG} .
+        - docker build -t ${DOCKER_TAG} --build-arg TAG=${TEST_TAG} .
         # - docker push ${DOCKER_TAG}
 
 stages:
@@ -29,4 +30,6 @@ stages:
   - name: release
     # if: tag =~ ^v AND fork = false
 
-all_branches: true
+branches:
+  only:
+    - garo/ci-releases
