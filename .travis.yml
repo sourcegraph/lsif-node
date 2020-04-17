@@ -21,8 +21,8 @@ jobs:
   - stage: npm_publish
     script:
     - yarn run build
-    - npm adduser "--registry=https://registry.npmjs.org/:_authToken=${NPM_TOKEN}"
-    #- npm publish
+    - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+    - npm publish
   - stage: docker_push
     script:
     - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
