@@ -34,7 +34,7 @@ stages:
 - name: npm_publish
   if: tag =~ ^v AND fork = false
 - name: docker_push
-  if: $TEST_TAG =~ ^v AND fork = false
+  if: env(TEST_TAG) =~ ^v AND fork = false
 branches:
   only:
   - garo/ci-releases
