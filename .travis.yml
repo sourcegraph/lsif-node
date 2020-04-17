@@ -28,6 +28,7 @@ jobs:
       api_key: "$NPM_TOKEN"
       on:
         all_branches: true
+      skip_cleanup: true
   - stage: docker_push
     script:
     - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
