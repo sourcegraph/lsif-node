@@ -21,7 +21,8 @@ jobs:
   - stage: npm_publish
     script:
     - yarn run build
-    - npm publish
+    - npm adduser "--registry=https://registry.npmjs.org/:_authToken=${NPM_TOKEN}"
+    #- npm publish
   - stage: docker_push
     script:
     - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
@@ -31,7 +32,7 @@ jobs:
 stages:
 - test
 - name: npm_publish
-  if: tag =~ ^v AND fork = false
+  # if: tag =~ ^v AND fork = false
 - name: docker_push
   if: tag =~ ^v AND fork = false
 branches:
