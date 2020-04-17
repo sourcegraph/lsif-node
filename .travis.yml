@@ -6,7 +6,7 @@ services:
 env:
   global:
   - DOCKER_REPO='sourcegraph/lsif-node'
-  - PATCH="TRAVIS_TAG"
+  - PATCH="$TRAVIS_TAG"
   - MINOR="${PATCH%.*}"
   - MAJOR="${MINOR%.*}"
   # DOCKER_PASSWORD
