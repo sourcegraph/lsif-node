@@ -6,8 +6,7 @@ services:
   - docker
 
 env:
-  - TRAVIS_TAG_SUBST=0.0.0
-  - DOCKER_TAG=sourcegraph/lsif-node:${TRAVIS_TAG_SUBST}
+  - DOCKER_TAG=sourcegraph/lsif-node:0.0.0
 
 install:
   - yarn
@@ -22,7 +21,7 @@ jobs:
         - yarn run build
         - npm publish --dry-run
         - echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin
-        - docker build -t ${DOCKER_TAG} --build-arg TAG=${TRAVIS_TAG_SUBST} .
+        - docker build -t ${DOCKER_TAG} --build-arg TAG=0.0.0 .
         # - docker push ${DOCKER_TAG}
 
 stages:
