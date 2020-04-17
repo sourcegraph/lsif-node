@@ -1,0 +1,39 @@
+language: node_js
+node_js: '13'
+cache: yarn
+services:
+- docker
+env:
+  global:
+  - DOCKER_REPO='sourcegraph/lsif-node'
+  - PATCH="TRAVIS_TAG"
+  - MINOR="${PATCH%.*}"
+  - MAJOR="${MINOR%.*}"
+  # DOCKER_PASSWORD
+  - secure: bjtPTnymQfO0Zi0WhRsMyk8JkgmL8owhAmf30QAhw4uoejrF2/gGpdDG8jQ/Kq5LgeMX+ZtIgHOwNdguHFfP7zRXB62i9LuJM6TaBYnkP57879pGiSnAKe1zePMRXWWDkCnsI9hSJIXjHS5N+vSUMidByoQjUsQ5K1PpwExrjKSE0Nbj8qZnnc0MCr8HBqtHQ871ZKCY9PyblquSLV3YXe5Ae8SIS/zfv++cvSLXtDiTEWIcbxdmFiAyj3qTiIbaljyEMECRPnPxQ3baV1cP8q3g06zDfIdc8EQIQS9G8xeY/Wcno2mZqiUhA9Myjbvv85w7LuAXpyTh9YExaCstdzgg3kPXXSA7WGk+vxERC3M076BZy1QDgmCJ12Xlbb10zJUWhyXyZ8IFDRCqHZjq3fZ6vEJBrAHQ0noijWdqL19IOMFsWsis2W8ba3TL/NKYyiw0DGhxBHz7UnqHkfYmUQv9kGfiapx93bHvXd2/CoKcIjEEjMT829d8xvKItiZu3th3yiWjwChid+nvapgSxljtNnBzAlHBM4BHiHnoP1iQCoeZh2xVHluh4k5GAUmgnU0ebN/C1TCpJl0yJqjlYDzrZ3YEwzpO/C4rQNWIqTyGHURW/RV3eeQ0rzHWBZ8/iNtWq3WKSZUo+BBHCXewYrbp4n3u3JufnYbpp7oaIRw=
+install:
+- yarn
+jobs:
+  include:
+  - stage: test
+    script:
+    - yarn run build
+  - stage: npm_publish
+    script:
+    - yarn run build
+    - npm publish --dry-run
+  - stage: docker_push
+    script:
+    - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
+    - docker build -t "$DOCKER_REPO:latest" -t "$DOCKER_REPO:$MAJOR" -t "$DOCKER_REPO:$MINOR"
+      -t "$DOCKER_REPO:$PATCH" --build-arg "TAG=$TRAVIS_TAG" .
+    - docker push $DOCKER_REPO
+stages:
+- test
+- name: npm_publish
+  if: tag =~ ^v AND fork = false
+- name: docker_push
+  if: tag =~ ^v AND fork = false
+branches:
+  only:
+  - master
