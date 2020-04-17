@@ -34,3 +34,6 @@ stages:
   if: tag =~ ^v AND fork = false
 - name: docker_push
   if: tag =~ ^v AND fork = false
+branches:
+  only:
+  - /.*/
