@@ -11,6 +11,7 @@ env:
   - MAJOR="${VERISON_SEGMENTS[0]}"
   - MINOR="${VERSION_SEGMENTS[1]}"
   - PATCH="${VERSION_SEGMENTS[2]}"
+  - secure: klI0WPQJvYiOvGy7tuqfbAjb0ma0j+BKysVre5wO98NVSgWo+FU0TPItLHFwiz+T+ld3XnDn/L8EBJFV+kwvZlVMkL/WyZcsYFHVXZXUYoH0/fKZI9JTUJmarnTJFEag1kGS/PUIcsJDPKY5Cj0yeXtKvruavUXxskNz0A7QIzIztRlsYXlZBuDWXghiyKIcA389OeK9gF/u2iIHmR+n1GWIrO6zxEKOxDZngSV+2Z1St1jgCwmmdc0J2KtIi8u1d0POKDbftvUpm6ucy+Zhx7pfQ3Mg2M8MmMgk+Lh+6jTKK0BiNr3cGafAlypfP4yW42jRQAVimZl+OgmBmH1WM/1QfF3h1fRBEuyngEBfCkPtf9K5/pNQTb3NanYGPut+1/84mYOGPSusfTa7aj97HqGjvphMylQ6a31++7YFZkHQKsxw1PS+dCKgD/xLZ3l5TLVfP7UFg5hLwHFKt4okAfWWuBHf+HZKUaxPP1f4W4euGwZpYP98LeTWVSrUBcu7v6vfcnT3NtegQkEvOmwO1CXlk2tHV4uRT6dC5e/4Nh7PWYtyRyTyLbSi7kFVEsYj7lk1iGFhxCJA2fOiVh30linYva409SbbDjS/pYtTCHTSux7mvJ5GTxGG9EjlgAiWdgvY//5RlhPCVAUGyWKiDj3RYO+tdqzJqi+zk4iTo4g=
 install:
 - yarn
 jobs:
@@ -25,8 +26,8 @@ jobs:
   - stage: docker_push
     script:
     - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
-    - docker build -t "$DOCKER_REPO:latest" -t "$DOCKER_REPO:$MAJOR" -t "$DOCKER_REPO:$MAJOR.$MINOR" -t "$DOCKER_REPO:$MAJOR.$MINOR.$PATCH" --build-arg TAG="v0.6.0" .
-    #- docker push sourcegraph/lsif-node
+    - docker build -t "$DOCKER_REPO:latest" -t "$DOCKER_REPO:$MAJOR" -t "$DOCKER_REPO:$MAJOR.$MINOR"
+      -t "$DOCKER_REPO:$MAJOR.$MINOR.$PATCH" --build-arg TAG="v0.6.0" .
 stages:
 - test
 - name: npm_publish
