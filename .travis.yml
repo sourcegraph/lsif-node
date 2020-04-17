@@ -19,11 +19,10 @@ jobs:
     script:
     - yarn run build
   - stage: npm_publish
-    script:
-    - yarn run build
-    - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-    # - npm init --scope=@sourcegraph
-    - yarn publish
+    script: yarn run build
+    deploy:
+      provider: npm
+      api_key: "$NPM_TOKEN"
   - stage: docker_push
     script:
     - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
