@@ -1,39 +1,38 @@
 language: node_js
 node_js: '13'
 cache: yarn
-
 services:
-  - docker
-
+- docker
 env:
-  - DOCKER_TAG=sourcegraph/lsif-node:0.6.0
-
+  global:
+  - TEST_TAG=v0.6.0
+  - DOCKER_NAME=sourcegraph/lsif-node
+  - VERSION_SEGMENTS=${TRAVIS_TAG//./ }
+  - MAJOR=${VERISON_SEGMENTS[0]}
+  - MINOR=${VERSION_SEGMENTS[1]}
+  - PATCH=${VERSION_SEGMENTS[2]}
+  # DOCKER_PASSWORD
+  - secure: bvMLJ6pvZM83MbJ0OiK7GIScK5VLoKZJ2QVjK8XcKeumkFC5aKv0i6LnQPmxzkDR+nvlg2q2w0PryTV8ydDN3g1uPygV6Cm9dncU3giN3K9/jeWnVHXFLPSym93mxHwy4QmewJZhb0xRy5yvSAB/YH150w5rggIHPmSbApYaPEFb1bS8ruM0JRi4lsmgB19kYhmQTbTHYCO6iRSwdpiIY2i+B9IVt+hbMfj9CB2kv4wlGqxa7HpD8VT1G7HIamILFaAhCPHD3ig8Rxu0+rj1O5gMdICnRUoW7HGjv+tC3ymUipub5FDaiQH7UfpPhW7j9QummPGAHO4zZqqXeHV/VwyQT0Swut0D5b1mR4hWImbyzO8dpwAJ5x6X/ZJJeWUQ8o8alxoSXdTO/Kr8fJbqlpLDeWaMqjIwBMVX0oq24OZTQJm30GGp+yhRgU6hdPPPbMi2xGR+fwOieQk36FLYXUs/M4/VGpeCcFIQFmRuH736A/euhD7HepdZyxnh4aLvekGoL+CuB3WyBIPh3Gv0slkik4PUwfQVFlFBJn0C0vaHThfXaIXXyhRRL2TnP+4xNzO3PhN3qw/+Kr+Ezjprk3pPHXU8mfZ38AiJSWtHacJeKSG5EeXKite8q+nhb72/ZviK44BK+lZjTNs2oaLkCB/IjlgoSpQcxv5NY1DL7Js=
 install:
-  - yarn
-
+- yarn
 jobs:
   include:
-    - stage: test
-      script:
-        - yarn run build
-    - stage: npm_publish
-      script:
-        - yarn run build
-        - npm publish --dry-run
-    - stage: docker_push
-      script:
-        - docker login -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}
-        - docker build -t ${DOCKER_TAG} --build-arg TAG=0.6.0 .
-        # - docker push ${DOCKER_TAG}
-
-
+  - stage: test
+    script:
+    - yarn run build
+  - stage: npm_publish
+    script:
+    - yarn run build
+    - npm publish --dry-run
+  - stage: docker_push
+    script:
+    - docker login -u sourcegraphci -p ${DOCKER_PASSWORD}
+    - docker build -t latest -t ${MAJOR} -t ${MAJOR}.${MINOR} -t ${MAJOR}.${MINOR}.${PATCH} --build-arg TAG=v0.6.0 .
+    #- docker push sourcegraph/lsif-node
 stages:
-  - test
-  - name: npm_publish
-    # if: tag =~ ^v AND fork = false
-  - name: docker_push
-    # if: tag =~ ^v AND fork = false
-
+- test
+- name: npm_publish
+- name: docker_push
 branches:
   only:
-    - garo/ci-releases
+  - garo/ci-releases
