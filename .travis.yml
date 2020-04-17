@@ -21,7 +21,7 @@ jobs:
     script:
     - yarn run build
   - stage: npm_publish
-    script: yarn run build
+    script: yarn install
     deploy:
       provider: npm
       email: dev@sourcegraph.com
