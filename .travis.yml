@@ -21,7 +21,7 @@ jobs:
   - stage: npm_publish
     script:
     - yarn run build
-    - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+    - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
     - npm publish
   - stage: docker_push
     script:
