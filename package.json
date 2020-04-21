@@ -4,7 +4,7 @@
   "description": "A tool to create an LSIF dump for TypeScript projects.",
   "sideEffects": false,
   "publisher": "sourcegraph",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "license": "MIT",
   "repository": {
     "type": "git",
