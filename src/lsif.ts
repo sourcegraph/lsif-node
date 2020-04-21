@@ -32,7 +32,7 @@ import {
   Moniker,
 } from 'lsif-protocol'
 
-import { toolVersion } from './consts'
+import { version } from '../package.json'
 import { VertexBuilder, EdgeBuilder, Builder } from './graph'
 import { Emitter } from './emitter'
 import * as tss from './typescripts'
@@ -1989,8 +1989,8 @@ class Visitor implements ResolverContext {
     this.repositoryRoot = options.repositoryRoot
     const toolInfo = {
       name: 'lsif-tsc',
-      version: toolVersion,
       args: ts.sys.args,
+      version
     }
     this.emit(
       this.vertex.metaData(

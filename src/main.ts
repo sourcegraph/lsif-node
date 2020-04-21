@@ -13,7 +13,7 @@ import * as ts from 'typescript-lsif'
 import * as tss from './typescripts'
 
 import { Id } from 'lsif-protocol'
-import { toolVersion } from './consts'
+import { version } from '../package.json'
 import { Emitter } from './emitter'
 import { TypingsInstaller } from './typings'
 import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif'
@@ -296,7 +296,7 @@ async function run(this: void, args: string[]): Promise<void> {
   )
 
   if (options.version) {
-    console.log(toolVersion)
+    console.log(version)
     return
   }
 

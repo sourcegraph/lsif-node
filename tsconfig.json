@@ -8,7 +8,8 @@
     "lib": ["esnext"],
     "rootDir": ".",
     "allowSyntheticDefaultImports": true,
-    "outDir": "dist"
+    "outDir": "dist",
+    "resolveJsonModule": true
   },
   "include": ["./**/*"]
 }
