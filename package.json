@@ -18,7 +18,8 @@
     "lsif-tsc": "./dist/src/main.js"
   },
   "files": [
-    "dist/",
+    "dist",
+    "src/*.js",
     "LICENSE"
   ],
   "scripts": {
