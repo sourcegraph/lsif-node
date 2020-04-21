@@ -32,15 +32,16 @@ jobs:
   - stage: docker_push
     script:
     - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
-    - docker build -t "$DOCKER_REPO:latest" -t "$DOCKER_REPO:$MAJOR" -t "$DOCKER_REPO:$MINOR"
-      -t "$DOCKER_REPO:$PATCH" --build-arg "TAG=$TRAVIS_TAG" .
-    - docker push $DOCKER_REPO
+    - docker build -t "$DOCKER_REPO:latest" --build-arg "TAG=v0.6.1" .
+    # - docker build -t "$DOCKER_REPO:latest" -t "$DOCKER_REPO:$MAJOR" -t "$DOCKER_REPO:$MINOR"
+    #   -t "$DOCKER_REPO:$PATCH" --build-arg "TAG=$TRAVIS_TAG" .
+    # - docker push $DOCKER_REPO
 stages:
 - test
 - name: npm_publish
   if: tag =~ ^v AND fork = false
 - name: docker_push
-  if: tag =~ ^v AND fork = false
+  # if: tag =~ ^v AND fork = false
 branches:
   only:
   - /.*/
