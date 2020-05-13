@@ -588,11 +588,19 @@ class Visitor implements ResolverContext {
   // private hoverCalls: number = 0;
   // private hoverTotal: number = 0;
 
+  private unknowns = 0
+
   public getOrCreateSymbolData(
     symbol: ts.Symbol,
     location?: ts.Node
   ): SymbolData {
-    const id: SymbolId = tss.createSymbolKey(this.typeChecker, symbol)
+    let id: SymbolId = tss.createSymbolKey(this.typeChecker, symbol)
+    if (id === tss.Unknown){
+      // Each unknown symbol should have its own subgraph. Without this,
+      // all symbol with an unknown key will all share the same definition
+      // and result sets, which is horribly imprecise.
+      id = `unknown_${this.unknowns++}`
+    }
     let result = this.dataManager.getSymbolData(id)
     if (result !== undefined) {
       return result
