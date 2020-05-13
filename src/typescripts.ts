@@ -183,9 +183,9 @@ export function getResolvedModules(
   return (sourceFile as InternalSourceFile).resolvedModules
 }
 
-const Unknown = 'unkown'
-const Undefined = 'undefined'
-const None = 'none'
+export const Unknown = 'unknown'
+export const Undefined = 'undefined'
+export const None = 'none'
 export function createSymbolKey(
   typeChecker: ts.TypeChecker,
   symbol: ts.Symbol

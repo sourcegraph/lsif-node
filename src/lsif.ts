@@ -58,7 +58,6 @@ export class DataManager implements SymbolDataContext {
   public symbolStats: number
   public symbolDatas: Map<string, SymbolData>
   public started: Date
-  public clearOnNode: Map<ts.Node, SymbolData[]>
 
   constructor(private context: EmitContext, project: Project) {
     this.projectData = new ProjectData(this, project)
@@ -68,7 +67,6 @@ export class DataManager implements SymbolDataContext {
     this.started = new Date()
     this.documentDatas = new Map()
     this.symbolDatas = new Map()
-    this.clearOnNode = new Map()
   }
 
   public get vertex(): VertexBuilder {
@@ -124,15 +122,6 @@ export class DataManager implements SymbolDataContext {
       this.symbolStats++
     }
     return result
-  }
-
-  public manageLifeCycle(node: ts.Node, symbolData: SymbolData): void {
-    let datas = this.clearOnNode.get(node)
-    if (datas === undefined) {
-      datas = []
-      this.clearOnNode.set(node, datas)
-    }
-    datas.push(symbolData)
   }
 }
 

@@ -32,7 +32,6 @@ export interface SymbolDataContext extends EmitContext {
     symbolId: SymbolId,
     create: () => SymbolData
   ): SymbolData
-  manageLifeCycle(node: ts.Node, symbolData: SymbolData): void
 }
 
 abstract class LSIFData {
@@ -116,21 +115,15 @@ export class DocumentData extends LSIFData {
 }
 
 class SymbolDataPartition extends LSIFData {
-  private static EMPTY_ARRAY = (Object.freeze([]) as unknown) as any[]
-  private static EMPTY_MAP = (Object.freeze(new Map()) as unknown) as Map<
-    any,
-    any
-  >
-
-  private definitionRanges: DefinitionRange[]
+  private definitionRanges: DefinitionRange[] = []
 
   private referenceRanges: Map<
     | ItemEdgeProperties.declarations
     | ItemEdgeProperties.definitions
     | ItemEdgeProperties.references,
     Range[]
-  >
-  private referenceResults: ReferenceResult[]
+  > = new Map()
+  private referenceResults: ReferenceResult[] = []
 
   constructor(
     context: SymbolDataContext,
@@ -138,9 +131,6 @@ class SymbolDataPartition extends LSIFData {
     private document: Document
   ) {
     super(context)
-    this.definitionRanges = SymbolDataPartition.EMPTY_ARRAY
-    this.referenceRanges = SymbolDataPartition.EMPTY_MAP
-    this.referenceResults = SymbolDataPartition.EMPTY_ARRAY
   }
 
   public begin(): void {
@@ -151,30 +141,10 @@ class SymbolDataPartition extends LSIFData {
     value: DefinitionRange,
     recordAsReference: boolean = true
   ): void {
-    if (this.definitionRanges === SymbolDataPartition.EMPTY_ARRAY) {
-      this.definitionRanges = []
-    }
     this.definitionRanges.push(value)
     if (recordAsReference) {
       this.addReference(value, ItemEdgeProperties.definitions)
     }
-  }
-
-  public findDefinition(range: lsp.Range): DefinitionRange | undefined {
-    if (this.definitionRanges === SymbolDataPartition.EMPTY_ARRAY) {
-      return undefined
-    }
-    for (const definitionRange of this.definitionRanges) {
-      if (
-        definitionRange.start.line === range.start.line &&
-        definitionRange.start.character === range.start.character &&
-        definitionRange.end.line === range.end.line &&
-        definitionRange.end.character === range.end.character
-      ) {
-        return definitionRange
-      }
-    }
-    return undefined
   }
 
   public addReference(
@@ -193,9 +163,6 @@ class SymbolDataPartition extends LSIFData {
       | ItemEdgeProperties.references
   ): void {
     if (value.label === 'range' && property !== undefined) {
-      if (this.referenceRanges === SymbolDataPartition.EMPTY_MAP) {
-        this.referenceRanges = new Map()
-      }
       let values = this.referenceRanges.get(property)
       if (values === undefined) {
         values = []
@@ -203,30 +170,27 @@ class SymbolDataPartition extends LSIFData {
       }
       values.push(value)
     } else if (value.label === 'referenceResult') {
-      if (this.referenceResults === SymbolDataPartition.EMPTY_ARRAY) {
-        this.referenceResults = []
-      }
       this.referenceResults.push(value)
     }
   }
 
   public end(): void {
-    if (this.definitionRanges !== SymbolDataPartition.EMPTY_ARRAY) {
+    if (this.definitionRanges.length > 0) {
       const definitionResult = this.symbolData.getOrCreateDefinitionResult()
       this.emit(
         this.edge.item(definitionResult, this.definitionRanges, this.document)
       )
     }
-    if (this.referenceRanges !== SymbolDataPartition.EMPTY_MAP) {
+
+    if (this.referenceRanges.size > 0) {
       const referenceResult = this.symbolData.getOrCreateReferenceResult()
-      for (const property of this.referenceRanges.keys()) {
-        const values = this.referenceRanges.get(property)!
+      for (const [property, values] of this.referenceRanges.entries()) {
         this.emit(
           this.edge.item(referenceResult, values, this.document, property)
         )
       }
     }
-    if (this.referenceResults !== SymbolDataPartition.EMPTY_ARRAY) {
+    if (this.referenceResults.length > 0) {
       const referenceResult = this.symbolData.getOrCreateReferenceResult()
       this.emit(
         this.edge.item(referenceResult, this.referenceResults, this.document)
@@ -236,8 +200,7 @@ class SymbolDataPartition extends LSIFData {
 }
 
 export abstract class SymbolData extends LSIFData {
-  private declarationInfo: tss.DefinitionInfo | tss.DefinitionInfo[] | undefined
-
+  public declarationInfo: tss.DefinitionInfo | tss.DefinitionInfo[] | undefined
   protected resultSet: ResultSet
 
   constructor(context: SymbolDataContext, private id: SymbolId) {
@@ -302,10 +265,6 @@ export abstract class SymbolData extends LSIFData {
     sourceFile: ts.SourceFile,
     definition: DefinitionRange
   ): void
-  public abstract findDefinition(
-    sourceFile: ts.SourceFile,
-    range: lsp.Range
-  ): DefinitionRange | undefined
 
   public abstract getOrCreateReferenceResult(): ReferenceResult
 
@@ -330,14 +289,10 @@ export abstract class SymbolData extends LSIFData {
 export class StandardSymbolData extends SymbolData {
   private definitionResult: DefinitionResult | undefined
   private referenceResult: ReferenceResult | undefined
-  private partitions: Map<string /* filename */, SymbolDataPartition  >=new Map()
-
-  constructor(
-    context: SymbolDataContext,
-    id: SymbolId,
-  ) {
-    super(context, id)
-  }
+  private partitions: Map<
+    string /* filename */,
+    SymbolDataPartition
+  > = new Map()
 
   public addDefinition(
     sourceFile: ts.SourceFile,
@@ -349,17 +304,6 @@ export class StandardSymbolData extends SymbolData {
       definition,
       recordAsReference
     )
-  }
-
-  public findDefinition(
-    sourceFile: ts.SourceFile,
-    range: lsp.Range
-  ): DefinitionRange | undefined {
-    const partition = this.partitions.get(sourceFile.fileName)
-    if (partition === undefined) {
-      return undefined
-    }
-    return partition.findDefinition(range)
   }
 
   public addReference(
@@ -410,7 +354,6 @@ export class StandardSymbolData extends SymbolData {
         this,
         documentData.document
       )
-      this.context.manageLifeCycle(sourceFile, this)
       result.begin()
       this.partitions.set(fileName, result)
     }
@@ -453,17 +396,6 @@ export class AliasedSymbolData extends StandardSymbolData {
     }
   }
 
-  public findDefinition(
-    sourceFile: ts.SourceFile,
-    range: lsp.Range
-  ): DefinitionRange | undefined {
-    if (this.rename) {
-      return super.findDefinition(sourceFile, range)
-    }
-
-    return this.aliased.findDefinition(sourceFile, range)
-  }
-
   public addReference(
     sourceFile: ts.SourceFile,
     reference: Range | ReferenceResult,
@@ -489,7 +421,7 @@ export class MethodSymbolData extends StandardSymbolData {
     context: SymbolDataContext,
     id: string,
     sourceFile: ts.SourceFile,
-    bases: SymbolData[] | undefined,
+    bases: SymbolData[] | undefined
   ) {
     super(context, id)
     this.sourceFile = sourceFile
@@ -603,10 +535,6 @@ export class UnionOrIntersectionSymbolData extends StandardSymbolData {
 }
 
 export class TransientSymbolData extends StandardSymbolData {
-  constructor(context: SymbolDataContext, id: string) {
-    super(context, id)
-  }
-
   public begin(): void {
     super.begin()
   }
