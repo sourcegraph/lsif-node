@@ -42,10 +42,10 @@
   dependencies:
     esquery "^1.0.1"
 
-"@sourcegraph/eslint-config@0.18.2":
-  version "0.18.2"
-  resolved "https://registry.yarnpkg.com/@sourcegraph/eslint-config/-/eslint-config-0.18.2.tgz#529b5409a57e3dd42866138a4a38cad0a5d3c168"
-  integrity sha512-1VAsT0Xm+p8wEAToEVs/poHzsFnWEpTbawRPVBCSjIXMzEnxzZYZrvEl1caqwJMqqeubfMXf6E7WHzXL/vnFiQ==
+"@sourcegraph/eslint-config@0.18.3":
+  version "0.18.3"
+  resolved "https://registry.yarnpkg.com/@sourcegraph/eslint-config/-/eslint-config-0.18.3.tgz#ca651657bea7a462eb822e3866ce45bce82e0415"
+  integrity sha512-sePFhEDrZ3O7ybBUgRo3D2sDBK6YN2c8GM90eWrh126AMSv17XhgtVTq0HuwEk+Tel28ayHVHf6WeLNZkEonHA==
   dependencies:
     "@sourcegraph/prettierrc" "^3.0.3"
     "@typescript-eslint/eslint-plugin" "^2.34.0"
@@ -56,7 +56,7 @@
     eslint-plugin-import "^2.20.2"
     eslint-plugin-jsdoc "^26.0.1"
     eslint-plugin-react "^7.19.0"
-    eslint-plugin-react-hooks "^4.0.0"
+    eslint-plugin-react-hooks "^4.0.4"
     eslint-plugin-rxjs "^0.0.2-beta.24"
     eslint-plugin-unicorn "^20.1.0"
 
@@ -1148,7 +1148,7 @@ eslint-plugin-jsdoc@^26.0.1:
     semver "^6.3.0"
     spdx-expression-parse "^3.0.1"
 
-eslint-plugin-react-hooks@^4.0.0:
+eslint-plugin-react-hooks@^4.0.4:
   version "4.0.4"
   resolved "https://registry.yarnpkg.com/eslint-plugin-react-hooks/-/eslint-plugin-react-hooks-4.0.4.tgz#aed33b4254a41b045818cacb047b81e6df27fa58"
   integrity sha512-equAdEIsUETLFNCmmCkiCGq6rkSK5MoJhXFPFYeUebcjKgBmWWcgVOqZyQC8Bv1BwVCnTq9tBxgJFgAJTWoJtA==
