@@ -1,4 +1,4 @@
-FROM sourcegraph/src-cli:3.14@sha256:f5efa2468366ddafb4143e0d0f379a1c898d6e48b57b61ef2a9a3e60d093063a AS src-cli
+FROM sourcegraph/src-cli:3.15@sha256:641d86ae957d4f8ff441b6d89e43bafcdb864dd94858996fa042a13fc41e16b7 AS src-cli
 
 FROM node:13.14.0-alpine3.10@sha256:11a7f448074e918f0e120e7b82892a57368ec531ef2215d5595620fb328bba44
 
