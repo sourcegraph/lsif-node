@@ -1,6 +1,6 @@
-FROM sourcegraph/src-cli:3.15@sha256:3c36b8dafd7fc2172eedd9cca299e46f95e6d523d125767a20f0029432e3cd30 AS src-cli
+FROM sourcegraph/src-cli:3.16 AS src-cli
 
-FROM node:13.14.0-alpine3.10@sha256:11a7f448074e918f0e120e7b82892a57368ec531ef2215d5595620fb328bba44
+FROM node:14.5-alpine3.10
 
 ARG TAG
 
