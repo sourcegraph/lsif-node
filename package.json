@@ -30,6 +30,10 @@
     "build": "node ./node_modules/typescript/bin/tsc -b .",
     "prepare": "yarn run build"
   },
+  "mocha": {
+    "require": "ts-node/register",
+    "spec": "src/**/*.test.ts"
+  },
   "dependencies": {
     "lru-cache": "^5.1.1",
     "lsif-protocol": "0.4.3",
@@ -46,10 +50,12 @@
     "@sourcegraph/tslint-config": "13.4.0",
     "@types/lru-cache": "5.1.0",
     "@types/minimist": "1.2.0",
+    "@types/mocha": "^8.2.0",
     "@types/node": "13.13.5",
     "@types/npm": "2.0.31",
     "@types/uuid": "7.0.0",
     "eslint": "7.17.0",
+    "mocha": "^8.2.1",
     "prettier": "2.2.1",
     "ts-node": "^8.6.2",
     "tslint": "6.1.3",
