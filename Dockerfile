@@ -9,7 +9,23 @@ RUN apk add --no-cache git
 COPY --from=src-cli /usr/bin/src /usr/bin
 RUN npm install -g @sourcegraph/lsif-tsc@${TAG}
 
-RUN apk add -U curl bash ca-certificates openssl ncurses coreutils python2 make gcc g++ libgcc linux-headers grep util-linux binutils findutils && \
+RUN apk add -U curl \
+    bash \
+    ca-certificates \
+    openssl \
+    ncurses \
+    coreutils \
+    python2 \
+    make \
+    gcc \
+    g++ \
+    libgcc \
+    linux-headers \
+    grep \
+    util-linux \
+    binutils \
+    findutils && \
+
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.37.2/install.sh | bash
 
 CMD ["/bin/sh"]
