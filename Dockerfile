@@ -4,10 +4,12 @@ FROM node:14.5-alpine3.10@sha256:7fb1e608dc4081c25930db83cb4a5df884b6a3f6e4e9f5f
 
 ARG TAG
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git bash curl ca-certificates
 
 COPY --from=src-cli /usr/bin/src /usr/bin
+
+RUN npm i -g n
+
 RUN npm install -g @sourcegraph/lsif-tsc@${TAG}
 
-ENTRYPOINT []
 CMD ["/bin/sh"]
