@@ -259,7 +259,6 @@ async function processProject(
     }
   }
 
-  program.getTypeChecker()
   return lsif(
     languageService,
     { ...options, projectRoot } as VisitorOptions,
