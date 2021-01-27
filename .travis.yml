@@ -35,8 +35,15 @@ jobs:
     - docker build -t "$DOCKER_REPO:latest" -t "$DOCKER_REPO:$MAJOR" -t "$DOCKER_REPO:$MINOR"
       -t "$DOCKER_REPO:$PATCH" --build-arg "TAG=$TRAVIS_TAG" .
     - docker push $DOCKER_REPO
+  - stage: docker_autoindex_push
+    script:
+    - echo "$DOCKER_PASSWORD" | docker login -u sourcegraphci --password-stdin
+    - docker build -f Dockerfile.autoindex -t "$DOCKER_REPO:autoindex"
+    - docker push $DOCKER_REPO:autoindex
 stages:
 - test
+- name: docker_autoindex_push
+  if: fork = false AND branch = master
 - name: npm_publish
   if: tag =~ ^v AND fork = false
 - name: docker_push
