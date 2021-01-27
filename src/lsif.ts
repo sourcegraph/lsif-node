@@ -7,8 +7,8 @@ import * as os from 'os'
 import * as path from 'path'
 
 import { URI } from 'vscode-uri'
-import * as ts from 'typescript-lsif'
-import * as LRUCache from 'lru-cache'
+import ts from 'typescript-lsif'
+import LRUCache from 'lru-cache'
 
 import {
   lsp,
