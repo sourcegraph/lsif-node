@@ -7,9 +7,9 @@
 import * as path from 'path'
 import * as fs from 'fs'
 
-import * as minimist from 'minimist'
+import minimist from 'minimist'
 
-import * as ts from 'typescript-lsif'
+import ts from 'typescript-lsif'
 import * as tss from './typescripts'
 
 import { Id } from 'lsif-protocol'

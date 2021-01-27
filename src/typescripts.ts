@@ -7,7 +7,7 @@
 import * as path from 'path'
 import * as crypto from 'crypto'
 
-import * as ts from 'typescript-lsif'
+import ts from 'typescript-lsif'
 
 import * as Is from './is'
 
