@@ -3,7 +3,7 @@ name: release-autoindex
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   autoindex-image:
