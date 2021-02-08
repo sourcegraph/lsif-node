@@ -42,7 +42,7 @@
   "devDependencies": {
     "@sourcegraph/eslint-config": "0.21.0",
     "@sourcegraph/prettierrc": "3.0.3",
-    "@sourcegraph/tsconfig": "4.0.0",
+    "@sourcegraph/tsconfig": "4.0.1",
     "@sourcegraph/tslint-config": "13.4.0",
     "@types/lru-cache": "5.1.0",
     "@types/minimist": "1.2.0",
