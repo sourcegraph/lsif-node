@@ -34,6 +34,3 @@ export function getResolverType(
     ? 'method'
     : 'standard'
 }
-
-
-
