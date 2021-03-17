@@ -27,11 +27,6 @@ import { ExportLinker, ImportLinker } from './linker'
 //
 //
 
-const version = '0.0.1'
-
-//
-//
-
 const phantomPosition = { line: 0, character: 0 }
 const phantomRange = { start: phantomPosition, end: phantomPosition }
 
