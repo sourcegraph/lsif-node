@@ -27,10 +27,13 @@ import { ExportLinker, ImportLinker } from './linker'
 //
 //
 
-const phantomRange = {
-  start: { line: 0, character: 0 },
-  end: { line: 0, character: 0 },
-}
+const version = '0.0.1'
+
+//
+//
+
+const phantomPosition = { line: 0, character: 0 }
+const phantomRange = { start: phantomPosition, end: phantomPosition }
 
 const rangeFromNode = (
   file: ts.SourceFile,
@@ -39,7 +42,7 @@ const rangeFromNode = (
 ): lsp.Range => ({
   start:
     file === node
-      ? { line: 0, character: 0 }
+      ? phantomPosition
       : file.getLineAndCharacterOfPosition(
           node.getStart(file, includeJsDocComment)
         ),
@@ -147,6 +150,7 @@ async function run(args: string[]): Promise<void> {
     }
     // TODO - is this backwards?
     if (newConfig.compilerOptions !== undefined) {
+      // TODO - why not just assign?
       //   newConfig.compilerOptions =
       Object.assign(
         newConfig.compilerOptions,
