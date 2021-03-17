@@ -223,7 +223,7 @@ async function processProject(
         return process.cwd()
       }
     },
-    getDefaultLibFileName: options => ts.getDefaultLibFilePath(options),
+    getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
     directoryExists: ts.sys.directoryExists,
     getDirectories: ts.sys.getDirectories,
     fileExists: ts.sys.fileExists,
@@ -377,7 +377,7 @@ export async function main(): Promise<void> {
   return run(ts.sys.args)
 }
 
-run(ts.sys.args).then(undefined, error => {
+run(ts.sys.args).then(undefined, (error) => {
   console.error(error)
   process.exitCode = 1
 })

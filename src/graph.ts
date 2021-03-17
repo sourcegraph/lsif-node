@@ -349,7 +349,7 @@ export class EdgeBuilder {
       type: ElementTypes.edge,
       label: EdgeLabels.contains,
       outV: from.id,
-      inVs: to.map(v => v.id),
+      inVs: to.map((v) => v.id),
     }
   }
 
@@ -563,7 +563,7 @@ export class EdgeBuilder {
       type: ElementTypes.edge,
       label: EdgeLabels.item,
       outV: from.id,
-      inVs: to.map(v => v.id),
+      inVs: to.map((v) => v.id),
       document: document.id,
     }
     switch (from.label) {

@@ -11,6 +11,6 @@ export interface Emitter {
 
 export function create(writer: Writer): Emitter {
   return {
-    emit: element => writer.writeln(JSON.stringify(element, undefined, 0)),
+    emit: (element) => writer.writeln(JSON.stringify(element, undefined, 0)),
   }
 }

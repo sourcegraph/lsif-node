@@ -205,7 +205,7 @@ namespace Converter {
     displayParts: ts.SymbolDisplayPart[] | undefined
   ) {
     if (displayParts) {
-      return displayParts.map(displayPart => displayPart.text).join('')
+      return displayParts.map((displayPart) => displayPart.text).join('')
     }
     return ''
   }
@@ -1532,7 +1532,7 @@ class MethodResolver extends SymbolDataResolver {
         scope
       )
     }
-    let baseSymbolData = baseMembers.map(member =>
+    let baseSymbolData = baseMembers.map((member) =>
       this.resolverContext.getOrCreateSymbolData(member)
     )
     return new MethodSymbolData(
@@ -1990,7 +1990,7 @@ class Visitor implements ResolverContext {
     const toolInfo = {
       name: 'lsif-tsc',
       args: ts.sys.args,
-      version
+      version,
     }
     this.emit(
       this.vertex.metaData(
@@ -2177,7 +2177,7 @@ class Visitor implements ResolverContext {
     node: T
   ): void {
     if (visit.call(this, node)) {
-      node.forEachChild(child => this.visit(child))
+      node.forEachChild((child) => this.visit(child))
     }
     this.dataManager.nodeProcessed(node)
     endVisit.call(this, node)
@@ -2220,7 +2220,9 @@ class Visitor implements ResolverContext {
         sourceFileSymbol !== undefined
       ) {
         if (node.exportClause !== undefined) {
-          function isNamedExports(bindings: ts.NamedExportBindings): bindings is ts.NamedExports {
+          function isNamedExports(
+            bindings: ts.NamedExportBindings
+          ): bindings is ts.NamedExports {
             return 'elements' in bindings
           }
 
@@ -2228,19 +2230,15 @@ class Visitor implements ResolverContext {
             ? node.exportClause.elements
             : [{ name: node.exportClause.name, propertyName: undefined }]
 
-          for (let {name, propertyName} of elements) {
-            let exportSymbol = this.typeChecker.getSymbolAtLocation(
-              name
-            )
+          for (let { name, propertyName } of elements) {
+            let exportSymbol = this.typeChecker.getSymbolAtLocation(name)
             if (exportSymbol === undefined) {
               continue
             }
             processSymbol(disposables, sourceFileSymbol, exportSymbol)
             let localSymbol: ts.Symbol | undefined
             if (propertyName !== undefined) {
-              localSymbol = this.typeChecker.getSymbolAtLocation(
-                propertyName
-              )
+              localSymbol = this.typeChecker.getSymbolAtLocation(propertyName)
             } else if (tss.isAliasSymbol(exportSymbol)) {
               localSymbol = this.typeChecker.getAliasedSymbol(exportSymbol)
             }

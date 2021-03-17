@@ -36,7 +36,7 @@ interface PackageJson {
 function stripComments(content: string): string {
   const regexp = /("(?:[^\\"]*(?:\\.)?)*")|('(?:[^\\']*(?:\\.)?)*')|(\/\*(?:\r?\n|.)*?\*\/)|(\/{2,}.*?(?:(?:\r?\n)|$))/g
 
-  return content.replace(regexp, function(match, m1, m2, m3, m4) {
+  return content.replace(regexp, function (match, m1, m2, m3, m4) {
     // Only one of m1, m2, m3, m4 matches
     if (m3) {
       // A block comment. Replace with nothing
@@ -102,7 +102,7 @@ export class TypingsInstaller {
     }
     projectRoot = path.normalize(projectRoot)
 
-    typings = typings.map(typing =>
+    typings = typings.map((typing) =>
       typing.startsWith('@types/') ? typing : `@types/${typing}`
     )
 
