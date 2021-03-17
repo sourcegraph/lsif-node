@@ -92,6 +92,39 @@ const getHover = (
   return undefined
 }
 
+const makeLanguageServiceHost = (
+  config: ts.ParsedCommandLine,
+  currentDirectory: string
+): ts.LanguageServiceHost => {
+  const scriptSnapshots = new Map<string, ts.IScriptSnapshot | null>()
+
+  return {
+    getProjectVersion: () => '0',
+    getScriptVersion: () => '0',
+    getCurrentDirectory: () => currentDirectory,
+    getCompilationSettings: () => config.options,
+    getProjectReferences: () => config.projectReferences,
+    getScriptFileNames: () => config.fileNames,
+    directoryExists: ts.sys.directoryExists.bind(ts.sys),
+    fileExists: ts.sys.fileExists.bind(ts.sys),
+    getDefaultLibFileName: ts.getDefaultLibFilePath.bind(ts),
+    getDirectories: ts.sys.getDirectories.bind(ts.sys),
+    readDirectory: ts.sys.readDirectory.bind(ts.sys),
+    readFile: ts.sys.readFile.bind(ts.sys),
+    getScriptSnapshot: (fileName: string): ts.IScriptSnapshot | undefined => {
+      let snapshot = scriptSnapshots.get(fileName)
+      if (snapshot === undefined) {
+        snapshot = ts.sys.fileExists(fileName)
+          ? ts.ScriptSnapshot.fromString(ts.sys.readFile(fileName) || '')
+          : null
+        scriptSnapshots.set(fileName, snapshot)
+      }
+
+      return snapshot || undefined
+    },
+  }
+}
+
 //
 //
 
@@ -150,13 +183,9 @@ async function run(args: string[]): Promise<void> {
     if (error) {
       throw new Error(ts.formatDiagnostics([error], ts.createCompilerHost({})))
     }
-    // TODO - is this backwards?
-    if (newConfig.compilerOptions !== undefined) {
-      // TODO - why not just assign?
-      //   newConfig.compilerOptions =
-      Object.assign(
-        newConfig.compilerOptions,
-        tss.getDefaultCompilerOptions(tsconfigFileName)
+    if (!newConfig.compilerOptions) {
+      newConfig.compilerOptions = tss.getDefaultCompilerOptions(
+        tsconfigFileName
       )
     }
     const result = ts.parseJsonConfigFileContent(
@@ -192,37 +221,7 @@ async function run(args: string[]): Promise<void> {
       : typingsInstaller.guessTypings(projectRoot, currentDirectory))
   }
 
-  // TODO - extract
-  const scriptSnapshots: Map<string, ts.IScriptSnapshot | null> = new Map()
-  const getScriptSnapshot = (
-    fileName: string
-  ): ts.IScriptSnapshot | undefined => {
-    let snapshot = scriptSnapshots.get(fileName)
-    if (snapshot === undefined) {
-      snapshot = ts.sys.fileExists(fileName)
-        ? ts.ScriptSnapshot.fromString(ts.sys.readFile(fileName) || '')
-        : null
-      scriptSnapshots.set(fileName, snapshot)
-    }
-
-    return snapshot || undefined
-  }
-  const host: ts.LanguageServiceHost = {
-    getProjectVersion: () => '0',
-    getScriptVersion: () => '0',
-    getCurrentDirectory: () => currentDirectory,
-    getCompilationSettings: () => config.options,
-    getProjectReferences: () => config.projectReferences,
-    getScriptFileNames: () => config.fileNames,
-    directoryExists: ts.sys.directoryExists.bind(ts.sys),
-    fileExists: ts.sys.fileExists.bind(ts.sys),
-    getDefaultLibFileName: ts.getDefaultLibFilePath.bind(ts),
-    getDirectories: ts.sys.getDirectories.bind(ts.sys),
-    readDirectory: ts.sys.readDirectory.bind(ts.sys),
-    readFile: ts.sys.readFile.bind(ts.sys),
-    getScriptSnapshot,
-  }
-
+  const host = makeLanguageServiceHost(config, currentDirectory)
   const languageService = ts.createLanguageService(host)
   const program = languageService.getProgram()
   if (!program) {
