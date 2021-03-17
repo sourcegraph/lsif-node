@@ -4,14 +4,14 @@ import {
   lsp,
   Range,
   Document,
-  DefinitionResult,
   ReferenceResult,
   DefinitionRange,
   Moniker,
-  MonikerKind,
   ItemEdgeProperties,
   ResultSet,
   RangeTagTypes,
+  VertexLabels,
+  DefinitionTag,
 } from 'lsif-protocol'
 import * as path from 'path'
 import ts from 'typescript-lsif'
@@ -24,11 +24,7 @@ import { URI } from 'vscode-uri'
 import { FileWriter } from './writer'
 import { ExportLinker, ImportLinker } from './linker'
 
-//
-//
-
 const version = '0.0.1'
-
 const phantomPosition = { line: 0, character: 0 }
 const phantomRange = { start: phantomPosition, end: phantomPosition }
 
@@ -136,11 +132,6 @@ class DocumentData {
     public externalLibrary: boolean
   ) {}
 
-  public addRange(range: Range): void {
-    this.emitter.emit(range)
-    this.ranges.push(range)
-  }
-
   public begin(): void {
     this.emitter.emit(this.document)
   }
@@ -150,21 +141,23 @@ class DocumentData {
       this.emitter.emit(this.builder.edge.contains(this.document, this.ranges))
     }
   }
+
+  public addRange(range: Range): void {
+    this.emitter.emit(range)
+    this.ranges.push(range)
+  }
 }
 
-class SymbolData {
-  private definitionInfo: tss.DefinitionInfo | tss.DefinitionInfo[] | undefined
+type ReferenceRangesProperties =
+  | ItemEdgeProperties.declarations
+  | ItemEdgeProperties.definitions
+  | ItemEdgeProperties.references
 
+class SymbolData {
+  private definitionInfo: tss.DefinitionInfo[] = []
   private resultSet: ResultSet
-  private definitionResult: DefinitionResult | undefined
-  private referenceResult: ReferenceResult | undefined
   private definitionRanges: DefinitionRange[] = []
-  private referenceRanges: Map<
-    | ItemEdgeProperties.declarations
-    | ItemEdgeProperties.definitions
-    | ItemEdgeProperties.references,
-    Range[]
-  > = new Map()
+  private referenceRanges = new Map<ReferenceRangesProperties, Range[]>()
   private referenceResults: ReferenceResult[] = []
 
   public constructor(
@@ -175,122 +168,18 @@ class SymbolData {
     this.resultSet = this.builder.vertex.resultSet()
   }
 
-  public recordDefinitionInfo(info: tss.DefinitionInfo): void {
-    // TODO - different if union/intersection/transient type
-    // TODO
-    if (this.definitionInfo === undefined) {
-      this.definitionInfo = info
-    } else if (Array.isArray(this.definitionInfo)) {
-      this.definitionInfo.push(info)
-    } else {
-      this.definitionInfo = [this.definitionInfo]
-      this.definitionInfo.push(info)
-    }
-  }
-
-  public hasDefinitionInfo(info: tss.DefinitionInfo): boolean {
-    if (this.definitionInfo === undefined) {
-      return false
-    }
-
-    // TODO
-    if (Array.isArray(this.definitionInfo)) {
-      for (const item of this.definitionInfo) {
-        if (tss.DefinitionInfo.equals(item, info)) {
-          return true
-        }
-      }
-      return false
-    }
-
-    return tss.DefinitionInfo.equals(this.definitionInfo, info)
-  }
-
-  public addHover(hover: lsp.Hover): void {
-    const hr = this.builder.vertex.hoverResult(hover)
-    this.emitter.emit(hr)
-    this.emitter.emit(this.builder.edge.hover(this.resultSet, hr))
-  }
-
-  // TODO - missing things for other resolver classes
-  public addDefinition(
-    sourceFile: ts.SourceFile,
-    definition: DefinitionRange,
-    recordAsReference = true
-  ): void {
-    this.emitter.emit(this.builder.edge.next(definition, this.resultSet))
-
-    this.definitionRanges.push(definition)
-    if (recordAsReference) {
-      this.addReference(sourceFile, definition, ItemEdgeProperties.definitions)
-    }
-  }
-
-  // TODO - missing things for other resolver classes
-  public addReference(
-    sourceFile: ts.SourceFile,
-    reference: Range | ReferenceResult,
-    property?:
-      | ItemEdgeProperties.declarations
-      | ItemEdgeProperties.definitions
-      | ItemEdgeProperties.references
-  ): void {
-    if (reference.label === 'range') {
-      this.emitter.emit(this.builder.edge.next(reference, this.resultSet))
-    }
-
-    if (reference.label === 'range' && property !== undefined) {
-      let values = this.referenceRanges.get(property)
-      if (values === undefined) {
-        values = []
-        this.referenceRanges.set(property, values)
-      }
-      values.push(reference)
-    } else if (reference.label === 'referenceResult') {
-      this.referenceResults.push(reference)
-    }
-  }
-
-  //
-  // TODO - skip and only do import/export linkers
-  public addMoniker(identifier: string, kind: MonikerKind): Moniker {
-    const moniker = this.builder.vertex.moniker('tsc', identifier, kind)
-    this.emitter.emit(moniker)
-    this.emitter.emit(this.builder.edge.moniker(this.resultSet, moniker))
-    return moniker
-  }
-
-  public getOrCreateDefinitionResult(): DefinitionResult {
-    if (this.definitionResult === undefined) {
-      this.definitionResult = this.builder.vertex.definitionResult()
-      this.emitter.emit(this.definitionResult)
-      this.emitter.emit(
-        this.builder.edge.definition(this.resultSet, this.definitionResult)
-      )
-    }
-
-    return this.definitionResult
-  }
-
-  public getOrCreateReferenceResult(): ReferenceResult {
-    if (this.referenceResult === undefined) {
-      this.referenceResult = this.builder.vertex.referencesResult()
-      this.emitter.emit(this.referenceResult)
-      this.emitter.emit(
-        this.builder.edge.references(this.resultSet, this.referenceResult)
-      )
-    }
-
-    return this.referenceResult
-  }
-
   public begin(): void {
     this.emitter.emit(this.resultSet)
   }
 
   public end(): void {
     if (this.definitionRanges.length > 0) {
-      const definitionResult = this.getOrCreateDefinitionResult()
+      const definitionResult = this.builder.vertex.definitionResult()
+      this.emitter.emit(definitionResult)
+      this.emitter.emit(
+        this.builder.edge.definition(this.resultSet, definitionResult)
+      )
+
       this.emitter.emit(
         this.builder.edge.item(
           definitionResult,
@@ -300,35 +189,385 @@ class SymbolData {
       )
     }
 
-    if (this.referenceRanges.size > 0) {
-      const referenceResult = this.getOrCreateReferenceResult()
-      for (const property of this.referenceRanges.keys()) {
-        const values = this.referenceRanges.get(property)!
+    if (this.referenceRanges.size > 0 || this.referenceResults.length > 0) {
+      const referenceResult = this.builder.vertex.referencesResult()
+      this.emitter.emit(referenceResult)
+      this.emitter.emit(
+        this.builder.edge.references(this.resultSet, referenceResult)
+      )
+
+      if (this.referenceRanges.size > 0) {
+        for (const property of this.referenceRanges.keys()) {
+          const values = this.referenceRanges.get(property)!
+          this.emitter.emit(
+            this.builder.edge.item(
+              referenceResult,
+              values,
+              this.document,
+              property
+            )
+          )
+        }
+      } else {
         this.emitter.emit(
           this.builder.edge.item(
             referenceResult,
-            values,
-            this.document,
-            property
+            this.referenceResults,
+            this.document
           )
         )
       }
     }
-    if (this.referenceResults.length > 0) {
-      const referenceResult = this.getOrCreateReferenceResult()
-      this.emitter.emit(
-        this.builder.edge.item(
-          referenceResult,
-          this.referenceResults,
-          this.document
-        )
-      )
+  }
+
+  public hasDefinitionInfo(info: tss.DefinitionInfo): boolean {
+    return this.definitionInfo.some((definitionInfo) =>
+      tss.DefinitionInfo.equals(info, definitionInfo)
+    )
+  }
+
+  // TODO: RESOLVER METHOD: different for union/intersection/transient types
+  public addDefinition(
+    sourceFile: ts.SourceFile,
+    definition: DefinitionRange,
+    recordAsReference = true
+  ): void {
+    this.emitter.emit(this.builder.edge.next(definition, this.resultSet))
+    this.definitionRanges.push(definition)
+    if (recordAsReference) {
+      this.addReference(sourceFile, definition, ItemEdgeProperties.definitions)
     }
+  }
+
+  // TODO - always called with addDefinition
+  // TODO: RESOLVER METHOD: different for union/intersection/transient types
+  public recordDefinitionInfo(info: tss.DefinitionInfo): void {
+    this.definitionInfo.push(info)
+  }
+
+  // TODO: RESOLVER METHOD: different for union/intersection/transient types
+  public addReference(
+    sourceFile: ts.SourceFile,
+    reference: Range | ReferenceResult,
+    property?: ReferenceRangesProperties
+  ): void {
+    switch (reference.label) {
+      case VertexLabels.range:
+        this.emitter.emit(this.builder.edge.next(reference, this.resultSet))
+        if (property !== undefined) {
+          this.referenceRanges.set(
+            property,
+            (this.referenceRanges.get(property) || []).concat([reference])
+          )
+        }
+        break
+
+      case VertexLabels.referenceResult:
+        this.referenceResults.push(reference)
+        break
+    }
+  }
+
+  public addHover(hover: lsp.Hover): void {
+    const hoverResult = this.builder.vertex.hoverResult(hover)
+    this.emitter.emit(hoverResult)
+    this.emitter.emit(this.builder.edge.hover(this.resultSet, hoverResult))
+  }
+
+  public addMoniker(moniker: Moniker): void {
+    this.emitter.emit(this.builder.edge.moniker(this.resultSet, moniker))
   }
 }
 
-//
-//
+class Indexer {
+  private documentDatas = new Map<string, DocumentData | null>()
+  private symbolDatas = new Map<string, SymbolData | null>()
+  private currentSourceFile: ts.SourceFile | undefined
+  private currentDocumentData: DocumentData | undefined
+
+  public constructor(
+    private builder: Builder,
+    private emitter: Emitter,
+    private program: ts.Program,
+    private typeChecker: ts.TypeChecker,
+    private importLinker: ImportLinker,
+    private exportLinker: ExportLinker | undefined,
+    private languageService: ts.LanguageService,
+    // private projectRoot: string,
+    // private rootDir: string,
+    // private outDir: string,
+    private repositoryRoot: string
+  ) {}
+
+  public index(): void {
+    const metadata = this.builder.vertex.metaData(
+      version,
+      URI.file(this.repositoryRoot).toString(true),
+      { name: 'lsif-tsc', args: ts.sys.args, version }
+    )
+    this.emitter.emit(metadata)
+
+    const project = this.builder.vertex.project()
+    this.emitter.emit(project)
+
+    for (const sourceFile of this.program.getSourceFiles()) {
+      if (this.isFullContentIgnored(sourceFile)) {
+        continue
+      }
+
+      console.log(`processing ${sourceFile.fileName}`)
+      this.visit(sourceFile)
+    }
+
+    for (const symbolData of this.symbolDatas.values()) {
+      symbolData?.end()
+    }
+    for (const documentData of this.documentDatas.values()) {
+      documentData?.end()
+    }
+
+    this.emitter.emit(
+      this.builder.edge.contains(
+        project,
+        Array.from(this.documentDatas.values()).map(
+          (documentData) => documentData!.document
+        )
+      )
+    )
+  }
+
+  public visit(node: ts.Node): void {
+    switch (node.kind) {
+      case ts.SyntaxKind.SourceFile:
+        this.currentSourceFile = node as ts.SourceFile
+        this.currentDocumentData = this.getOrCreateDocumentData(
+          this.currentSourceFile
+        )
+        break
+
+      case ts.SyntaxKind.ModuleDeclaration:
+        // TODO - need to do export things?
+        break
+
+      case ts.SyntaxKind.ClassDeclaration:
+      case ts.SyntaxKind.InterfaceDeclaration:
+      case ts.SyntaxKind.TypeParameter:
+      case ts.SyntaxKind.MethodDeclaration:
+      case ts.SyntaxKind.MethodSignature:
+      case ts.SyntaxKind.FunctionDeclaration:
+      case ts.SyntaxKind.Parameter:
+        // TODO - visit declaration (for document symbols only)
+        break
+
+      case ts.SyntaxKind.ExportAssignment:
+      case ts.SyntaxKind.Identifier:
+      case ts.SyntaxKind.StringLiteral:
+        if (!this.currentSourceFile || !this.currentDocumentData) {
+          return
+        }
+
+        const symbol = this.typeChecker.getSymbolAtLocation(node)
+        if (!symbol) {
+          return
+        }
+
+        const symbolData = this.getOrCreateSymbolData(symbol, node)
+        if (!symbolData) {
+          return
+        }
+
+        const definitionInfo = tss.createDefinitionInfo(
+          this.currentSourceFile,
+          node
+        )
+        if (symbolData.hasDefinitionInfo(definitionInfo)) {
+          return
+        }
+
+        const reference = this.builder.vertex.range(
+          rangeFromNode(this.currentSourceFile, node),
+          {
+            type: RangeTagTypes.reference,
+            text: node.getText(),
+          }
+        )
+
+        this.currentDocumentData.addRange(reference)
+        symbolData.addReference(
+          this.currentSourceFile,
+          reference,
+          ItemEdgeProperties.references
+        )
+        return
+    }
+
+    node.forEachChild((child) => this.visit(child))
+
+    switch (node.kind) {
+      case ts.SyntaxKind.SourceFile:
+        this.currentSourceFile = undefined
+        this.currentDocumentData = undefined
+        break
+    }
+  }
+
+  private isFullContentIgnored(sourceFile: ts.SourceFile): boolean {
+    return (
+      tss.Program.isSourceFileDefaultLibrary(this.program, sourceFile) ||
+      tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)
+    )
+  }
+
+  private getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
+    const cachedDocumentData = this.documentDatas.get(sourceFile.fileName)
+    if (cachedDocumentData) {
+      return cachedDocumentData
+    }
+
+    const document = this.builder.vertex.document(sourceFile.fileName, '')
+
+    // TODO - implement
+    const monikerPath: string | undefined = undefined
+    const externalLibrary = false
+
+    const documentData = new DocumentData(
+      this.builder,
+      this.emitter,
+      document,
+      monikerPath,
+      externalLibrary
+    )
+    documentData.begin()
+    this.documentDatas.set(sourceFile.fileName, documentData)
+    return documentData
+  }
+
+  private getOrCreateSymbolData(
+    symbol: ts.Symbol,
+    location: ts.Node
+  ): SymbolData {
+    if (!this.currentDocumentData) {
+      throw new Error('illegal symbol context')
+    }
+
+    const id = tss.createSymbolKey(this.typeChecker, symbol)
+    const cachedSymbolData = this.symbolDatas.get(id)
+    if (cachedSymbolData) {
+      return cachedSymbolData
+    }
+
+    const symbolData = new SymbolData(
+      this.builder,
+      this.emitter,
+      this.currentDocumentData.document
+    )
+    symbolData.begin()
+
+    // TODO - implement
+    const externalLibrary = false
+    const monikerIdentifier: string | undefined = undefined
+
+    if (monikerIdentifier) {
+      if (externalLibrary) {
+        const moniker = this.importLinker.handleMoniker2(monikerIdentifier)
+        if (moniker) {
+          symbolData.addMoniker(moniker)
+        }
+      } else if (this.exportLinker !== undefined) {
+        const moniker = this.exportLinker.handleMoniker2(monikerIdentifier)
+        if (moniker) {
+          symbolData.addMoniker(moniker)
+        }
+      }
+    }
+
+    for (const declaration of this.getDeclarations(symbol, location)) {
+      const textAndNode = this.getText(symbol, declaration)
+      if (!textAndNode) {
+        continue
+      }
+
+      this.emitDefinition(
+        declaration,
+        symbolData,
+        textAndNode.text,
+        textAndNode.node
+      )
+    }
+
+    this.symbolDatas.set(id, symbolData)
+    return symbolData
+  }
+
+  // TODO: RESOLVER METHOD: [location] in some
+  private getDeclarations(
+    symbol: ts.Symbol,
+    location: ts.Node
+  ): ts.Declaration[] {
+    return symbol.getDeclarations() || []
+  }
+
+  // TODO: RESOLVER METHOD: [location.getSourceFile()] in some
+  // private getSourceFiles(
+  //   symbol: ts.Symbol,
+  //   location: ts.Node
+  // ): ts.SourceFile[] {
+  //   return Array.from(
+  //     tss.getUniqueSourceFiles(symbol.getDeclarations()).values()
+  //   )
+  // }
+
+  // TODO: RESOLVER METHOD: [identifierNode, identifierText] = [declaration, declaration.getText()] in some
+  private getText(
+    symbol: ts.Symbol,
+    declaration: ts.Declaration
+  ): { text: string; node: ts.Node } | undefined {
+    if (tss.isNamedDeclaration(declaration)) {
+      return {
+        text: declaration.name.getText(),
+        node: declaration.name,
+      }
+    }
+
+    if (tss.isValueModule(symbol) && ts.isSourceFile(declaration)) {
+      return {
+        text: '',
+        node: declaration,
+      }
+    }
+
+    return undefined
+  }
+
+  private emitDefinition(
+    declaration: ts.Declaration,
+    symbolData: SymbolData,
+    text: string,
+    node: ts.Node
+  ): void {
+    const sourceFile = declaration.getSourceFile()
+    const documentData = this.getOrCreateDocumentData(sourceFile)
+    const range = ts.isSourceFile(declaration)
+      ? phantomRange
+      : rangeFromNode(sourceFile, node)
+    const definitionTag: DefinitionTag = {
+      type: RangeTagTypes.definition,
+      text,
+      kind: asSymbolKind(declaration),
+      fullRange: rangeFromNode(sourceFile, declaration),
+    }
+    const definition = this.builder.vertex.range(range, definitionTag)
+    documentData.addRange(definition)
+    symbolData.addDefinition(sourceFile, definition)
+    symbolData.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))
+    if (tss.isNamedDeclaration(declaration)) {
+      const hover = getHover(this.languageService, declaration.name, sourceFile)
+      if (hover) {
+        symbolData.addHover(hover)
+      }
+    }
+  }
+}
 
 async function run(args: string[]): Promise<void> {
   const packageFile = tss.makeAbsolute('package.json')
@@ -339,7 +578,6 @@ async function run(args: string[]): Promise<void> {
   )
   const writer = new FileWriter(fs.openSync('dump.lsif', 'w'))
   const emitter = createEmitter(writer)
-  const typingsInstaller = new TypingsInstaller() // TODO - per project
 
   let tsconfigFileName: string | undefined
   let config: ts.ParsedCommandLine = ts.parseCommandLine(args)
@@ -390,6 +628,7 @@ async function run(args: string[]): Promise<void> {
     : process.cwd()
 
   const inferTypings = true
+  const typingsInstaller = new TypingsInstaller()
   if (inferTypings) {
     // TODO - make parameters match for better interface
     await (config.options.types
@@ -408,22 +647,18 @@ async function run(args: string[]): Promise<void> {
     throw new Error("Couldn't create language service with underlying program.")
   }
   const typeChecker = program.getTypeChecker()
-  const compilerOptions = program.getCompilerOptions()
+  // const compilerOptions = program.getCompilerOptions()
 
-  const rootDir =
-    compilerOptions.rootDir !== undefined
-      ? tss.makeAbsolute(compilerOptions.rootDir, currentDirectory)
-      : compilerOptions.baseUrl !== undefined
-      ? tss.makeAbsolute(compilerOptions.baseUrl, currentDirectory)
-      : tss.normalizePath(tss.Program.getCommonSourceDirectory(program))
-  const outDir =
-    compilerOptions.outDir !== undefined
-      ? tss.makeAbsolute(compilerOptions.outDir, currentDirectory)
-      : rootDir
-
-  const isFullContentIgnored = (sourceFile: ts.SourceFile): boolean =>
-    tss.Program.isSourceFileDefaultLibrary(program, sourceFile) ||
-    tss.Program.isSourceFileFromExternalLibrary(program, sourceFile)
+  // const rootDir =
+  //   compilerOptions.rootDir !== undefined
+  //     ? tss.makeAbsolute(compilerOptions.rootDir, currentDirectory)
+  //     : compilerOptions.baseUrl !== undefined
+  //     ? tss.makeAbsolute(compilerOptions.baseUrl, currentDirectory)
+  //     : tss.normalizePath(tss.Program.getCommonSourceDirectory(program))
+  // const outDir =
+  //   compilerOptions.outDir !== undefined
+  //     ? tss.makeAbsolute(compilerOptions.outDir, currentDirectory)
+  //     : rootDir
 
   let counter = 1
   const idGenerator = () => counter++
@@ -440,293 +675,23 @@ async function run(args: string[]): Promise<void> {
   // TODO
   // console.log({ references: program.getResolvedProjectReferences() })
 
-  const metadata = builder.vertex.metaData(
-    version,
-    URI.file(repositoryRoot).toString(true),
-    { name: 'lsif-tsc', args: ts.sys.args, version }
-  )
-  emitter.emit(metadata)
-
-  const project = builder.vertex.project()
-  emitter.emit(project)
-
-  let currentSourceFile: ts.SourceFile | undefined
-  let currentDocumentData: DocumentData | undefined
-
-  const documentDatas = new Map<string, DocumentData | null>()
-
-  const computeMonikerPath = (
-    sourceFile: ts.SourceFile
-  ): string | undefined => {
-    // A real source file inside this project.
-    if (
-      !sourceFile.isDeclarationFile ||
-      (sourceFile.fileName.startsWith(rootDir) &&
-        sourceFile.fileName.charAt(rootDir.length) === '/')
-    ) {
-      return tss.computeMonikerPath(
-        projectRoot,
-        tss.toOutLocation(sourceFile.fileName, rootDir, outDir)
-      )
-    }
-
-    // TODO - need to have processed them first
-    // This can come from a dependent project.
-    // let fileName = sourceFile.fileName
-    // for (let outDir of dependentOutDirs) {
-    //   if (fileName.startsWith(outDir)) {
-    //     return tss.computeMonikerPath(projectRoot, sourceFile.fileName)
-    //   }
-    // }
-
-    return undefined
-  }
-
-  const getOrCreateDocumentData = (sourceFile: ts.SourceFile): DocumentData => {
-    const id = '' // TODO
-    const cachedDocumentData = documentDatas.get(id)
-    if (cachedDocumentData) {
-      return cachedDocumentData
-    }
-
-    const document = builder.vertex.document(sourceFile.fileName, '')
-    let monikerPath: string | undefined
-    let externalLibrary = false
-    if (tss.Program.isSourceFileFromExternalLibrary(program, sourceFile)) {
-      externalLibrary = true
-      monikerPath = tss.computeMonikerPath(projectRoot, sourceFile.fileName)
-    } else {
-      monikerPath = computeMonikerPath(sourceFile)
-    }
-
-    const documentData = new DocumentData(
-      builder,
-      emitter,
-      document,
-      monikerPath,
-      externalLibrary
-    )
-    documentData.begin()
-    documentDatas.set(id, documentData)
-    return documentData
-  }
-
-  const symbolDatas = new Map<string, SymbolData | null>()
-
-  const getOrCreateSymbolData = (
-    symbol: ts.Symbol,
-    location: ts.Node
-  ): SymbolData => {
-    const id = tss.createSymbolKey(typeChecker, symbol)
-    const cachedSymbolData = symbolDatas.get(id)
-    if (cachedSymbolData) {
-      return cachedSymbolData
-    }
-
-    // TODO: RESOLVER METHOD
-    // [location] in some
-    const declarations = symbol.getDeclarations() || []
-
-    // TODO: RESOLVER METHOD
-    // [location.getSourceFile()] in some
-    const sourceFiles = Array.from(
-      tss.getUniqueSourceFiles(symbol.getDeclarations()).values()
-    )
-
-    // TODO - share nicely
-    const symbolData = new SymbolData(
-      builder,
-      emitter,
-      currentDocumentData!.document
-    )
-    symbolData.begin()
-
-    let monikerPath: string | undefined | null
-    let externalLibrary = false
-    for (const sourceFile of sourceFiles.values()) {
-      const documentData = getOrCreateDocumentData(sourceFile)
-      if (monikerPath === undefined) {
-        monikerPath = documentData.monikerPath
-        externalLibrary = documentData.externalLibrary
-      } else if (monikerPath !== documentData.monikerPath) {
-        monikerPath = null
-      }
-    }
-    if (monikerPath === null) {
-      monikerPath = undefined
-      externalLibrary = false
-    }
-
-    // The symbol represents a source file
-    let monikerIdentifer: string | undefined
-    if (tss.isSourceFile(symbol) && monikerPath !== undefined) {
-      monikerIdentifer = tss.createMonikerIdentifier(monikerPath, undefined)
-      // } else if (exportPath !== undefined && exportPath !== '') {
-      // TODO - find an equivalent
-      //   monikerIdentifer = tss.createMonikerIdentifier(monikerPath, exportPath)
-    }
-    if (monikerIdentifer === undefined) {
-      // TODO - no need to emit
-      symbolData.addMoniker(id, MonikerKind.local)
-    } else if (externalLibrary) {
-      const moniker = symbolData.addMoniker(
-        monikerIdentifer,
-        MonikerKind.import
-      )
-      importLinker.handleMoniker(moniker)
-    } else {
-      const moniker = symbolData.addMoniker(
-        monikerIdentifer,
-        MonikerKind.export
-      )
-      if (exportLinker !== undefined) {
-        exportLinker.handleMoniker(moniker)
-      }
-    }
-
-    for (const declaration of declarations) {
-      const sourceFile = declaration.getSourceFile()
-
-      // TODO: RESOLVER METHOD
-      // [identifierNode, identifierText] = [declaration, declaration.getText()] in some
-
-      const [identifierNode, identifierText] = tss.isNamedDeclaration(
-        declaration
-      )
-        ? [declaration.name, declaration.name.getText()]
-        : tss.isValueModule(symbol) && ts.isSourceFile(declaration)
-        ? [declaration, '']
-        : [undefined, undefined]
-
-      if (identifierNode === undefined || identifierText === undefined) {
-        continue
-      }
-
-      const documentData = getOrCreateDocumentData(sourceFile)
-      const range = ts.isSourceFile(declaration)
-        ? phantomRange
-        : rangeFromNode(sourceFile, identifierNode)
-      const definition = builder.vertex.range(range, {
-        type: RangeTagTypes.definition,
-        text: identifierText,
-        kind: asSymbolKind(declaration),
-        fullRange: rangeFromNode(sourceFile, declaration),
-      })
-      documentData.addRange(definition)
-      symbolData.addDefinition(sourceFile, definition)
-      symbolData.recordDefinitionInfo(
-        tss.createDefinitionInfo(sourceFile, identifierNode)
-      )
-      if (tss.isNamedDeclaration(declaration)) {
-        const hover = getHover(languageService, declaration.name, sourceFile)
-        if (hover) {
-          symbolData.addHover(hover)
-        }
-      }
-    }
-
-    symbolDatas.set(id, symbolData)
-    return symbolData
-  }
-
-  const handleSymbol = (symbol: ts.Symbol | undefined, node: ts.Node) => {
-    if (!symbol || !currentSourceFile || !currentDocumentData) {
-      return
-    }
-
-    const symbolData = getOrCreateSymbolData(symbol, node)
-    if (!symbolData) {
-      return
-    }
-
-    const definitionInfo = tss.createDefinitionInfo(currentSourceFile, node)
-    if (symbolData.hasDefinitionInfo(definitionInfo)) {
-      return
-    }
-
-    const reference = builder.vertex.range(
-      rangeFromNode(currentSourceFile, node),
-      {
-        type: RangeTagTypes.reference,
-        text: node.getText(),
-      }
-    )
-
-    currentDocumentData.addRange(reference)
-    symbolData.addReference(
-      currentSourceFile,
-      reference,
-      ItemEdgeProperties.references
-    )
-  }
-
-  const visit = (node: ts.Node) => {
-    // console.log(node)
-
-    switch (node.kind) {
-      case ts.SyntaxKind.SourceFile:
-        currentSourceFile = node as ts.SourceFile
-        currentDocumentData = getOrCreateDocumentData(currentSourceFile)
-        break
-      case ts.SyntaxKind.ModuleDeclaration:
-        // TODO
-        break
-      case ts.SyntaxKind.ClassDeclaration:
-      case ts.SyntaxKind.InterfaceDeclaration:
-      case ts.SyntaxKind.TypeParameter:
-      case ts.SyntaxKind.MethodDeclaration:
-      case ts.SyntaxKind.MethodSignature:
-      case ts.SyntaxKind.FunctionDeclaration:
-      case ts.SyntaxKind.Parameter:
-        // TODO - visit declaration (for document symbols only)
-        break
-      case ts.SyntaxKind.ExportAssignment:
-      case ts.SyntaxKind.Identifier:
-      case ts.SyntaxKind.StringLiteral:
-        handleSymbol(typeChecker.getSymbolAtLocation(node), node)
-        return
-    }
-
-    node.forEachChild(visit)
-
-    switch (node.kind) {
-      case ts.SyntaxKind.SourceFile:
-        currentSourceFile = undefined
-        currentDocumentData = undefined
-        break
-    }
-  }
-
-  for (const sourceFile of program.getSourceFiles()) {
-    if (isFullContentIgnored(sourceFile)) {
-      continue
-    }
-
-    console.log(`processing ${sourceFile.fileName}`)
-    visit(sourceFile)
-  }
-
-  for (const symbolData of symbolDatas.values()) {
-    symbolData?.end()
-  }
-  for (const documentData of documentDatas.values()) {
-    documentData?.end()
-  }
-
-  emitter.emit(
-    builder.edge.contains(
-      project,
-      Array.from(documentDatas.values()).map(
-        (documentData) => documentData!.document
-      )
-    )
+  const indexer = new Indexer(
+    builder,
+    emitter,
+    program,
+    typeChecker,
+    importLinker,
+    exportLinker,
+    languageService,
+    // projectRoot,
+    // rootDir,
+    // outDir,
+    repositoryRoot
   )
 
+  indexer.index()
   return Promise.resolve()
 }
-
-//
-//
 
 export async function main(): Promise<void> {
   return run(ts.sys.args)
