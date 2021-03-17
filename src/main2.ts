@@ -27,6 +27,8 @@ import { ExportLinker, ImportLinker } from './linker'
 //
 //
 
+const version = '0.0.1'
+
 const phantomPosition = { line: 0, character: 0 }
 const phantomRange = { start: phantomPosition, end: phantomPosition }
 
@@ -58,29 +60,36 @@ const symbolKindMap: Map<number, lsp.SymbolKind> = new Map<
 const asSymbolKind = (node: ts.Node): lsp.SymbolKind =>
   symbolKindMap.get(node.kind) || lsp.SymbolKind.Property
 
-const displayPartsToString = (
-  displayParts: ts.SymbolDisplayPart[] | undefined
-) => {
-  if (displayParts) {
-    return displayParts.map((displayPart) => displayPart.text).join('')
-  }
-  return ''
-}
-
 const asHover = (file: ts.SourceFile, value: ts.QuickInfo): lsp.Hover => {
-  let content: lsp.MarkedString[] = []
-  if (value.displayParts !== undefined) {
-    content.push({
+  const contents: lsp.MarkedString[] = []
+  if (value.displayParts) {
+    contents.push({
       language: 'typescript',
-      value: displayPartsToString(value.displayParts),
+      value: (value.displayParts || []).map((part) => part.text).join(''),
     })
   }
   if (value.documentation && value.documentation.length > 0) {
-    content.push(displayPartsToString(value.documentation))
+    contents.push((value.documentation || []).map((part) => part.text).join(''))
   }
-  return {
-    contents: content,
+
+  return { contents }
+}
+
+const getHover = (
+  languageService: ts.LanguageService,
+  node: ts.DeclarationName,
+  sourceFile: ts.SourceFile = node.getSourceFile()
+): lsp.Hover | undefined => {
+  try {
+    const quickInfo = languageService.getQuickInfoAtPosition(node, sourceFile)
+    if (quickInfo !== undefined) {
+      return asHover(sourceFile, quickInfo)
+    }
+  } catch (err) {
+    // fallthrough
   }
+
+  return undefined
 }
 
 //
