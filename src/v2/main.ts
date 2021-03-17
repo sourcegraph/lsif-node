@@ -1,32 +1,42 @@
 import { execSync } from 'child_process'
 import * as fs from 'fs'
 import {
-  lsp,
-  Range,
-  Document,
-  ReferenceResult,
   DefinitionRange,
-  Moniker,
-  ItemEdgeProperties,
-  ResultSet,
-  RangeTagTypes,
-  VertexLabels,
   DefinitionTag,
+  Document,
+  ItemEdgeProperties,
+  lsp,
+  Moniker,
+  Range,
+  RangeTagTypes,
+  ReferenceResult,
+  ReferenceTag,
+  ResultSet,
+  VertexLabels,
 } from 'lsif-protocol'
 import * as path from 'path'
 import ts from 'typescript-lsif'
-import { create as createEmitter, Emitter } from './emitter'
-import { Builder } from './graph'
-import PackageJson from './package'
-import * as tss from './typescripts'
-import { TypingsInstaller } from './typings'
 import { URI } from 'vscode-uri'
-import { FileWriter } from './writer'
-import { ExportLinker, ImportLinker } from './linker'
+import { create as createEmitter, Emitter } from '../emitter'
+import { Builder } from '../graph'
+import { ExportLinker, ImportLinker } from '../linker'
+import { Symbols } from '../lsif'
+import PackageJson from '../package'
+import * as tss from '../typescripts'
+import { TypingsInstaller } from '../typings'
+import { FileWriter } from '../writer'
 
 const version = '0.0.1'
 const phantomPosition = { line: 0, character: 0 }
 const phantomRange = { start: phantomPosition, end: phantomPosition }
+
+type ResolverType =
+  | 'alias'
+  | 'method'
+  | 'standard'
+  | 'transient'
+  | 'typeAlias'
+  | 'unionOrIntersection'
 
 const rangeFromNode = (
   file: ts.SourceFile,
@@ -137,13 +147,12 @@ class DocumentData {
   }
 
   public end(): void {
-    if (this.ranges.length >= 0) {
+    if (this.ranges.length > 0) {
       this.emitter.emit(this.builder.edge.contains(this.document, this.ranges))
     }
   }
 
   public addRange(range: Range): void {
-    this.emitter.emit(range)
     this.ranges.push(range)
   }
 }
@@ -155,10 +164,11 @@ type ReferenceRangesProperties =
 
 class SymbolData {
   private definitionInfo: tss.DefinitionInfo[] = []
+
   private resultSet: ResultSet
   private definitionRanges: DefinitionRange[] = []
-  private referenceRanges = new Map<ReferenceRangesProperties, Range[]>()
   private referenceResults: ReferenceResult[] = []
+  private referenceRanges = new Map<ReferenceRangesProperties, Range[]>()
 
   public constructor(
     private builder: Builder,
@@ -175,47 +185,48 @@ class SymbolData {
   public end(): void {
     if (this.definitionRanges.length > 0) {
       const definitionResult = this.builder.vertex.definitionResult()
-      this.emitter.emit(definitionResult)
-      this.emitter.emit(
-        this.builder.edge.definition(this.resultSet, definitionResult)
+      const definition = this.builder.edge.definition(
+        this.resultSet,
+        definitionResult
+      )
+      const item = this.builder.edge.item(
+        definitionResult,
+        this.definitionRanges,
+        this.document
       )
 
-      this.emitter.emit(
-        this.builder.edge.item(
-          definitionResult,
-          this.definitionRanges,
-          this.document
-        )
-      )
+      this.emitter.emit(definitionResult)
+      this.emitter.emit(definition)
+      this.emitter.emit(item)
     }
 
     if (this.referenceRanges.size > 0 || this.referenceResults.length > 0) {
       const referenceResult = this.builder.vertex.referencesResult()
-      this.emitter.emit(referenceResult)
-      this.emitter.emit(
-        this.builder.edge.references(this.resultSet, referenceResult)
+      const references = this.builder.edge.references(
+        this.resultSet,
+        referenceResult
       )
 
+      this.emitter.emit(referenceResult)
+      this.emitter.emit(references)
+
       if (this.referenceRanges.size > 0) {
-        for (const property of this.referenceRanges.keys()) {
-          const values = this.referenceRanges.get(property)!
-          this.emitter.emit(
-            this.builder.edge.item(
-              referenceResult,
-              values,
-              this.document,
-              property
-            )
+        for (const [property, values] of this.referenceRanges.entries()) {
+          const item = this.builder.edge.item(
+            referenceResult,
+            values,
+            this.document,
+            property
           )
+          this.emitter.emit(item)
         }
       } else {
-        this.emitter.emit(
-          this.builder.edge.item(
-            referenceResult,
-            this.referenceResults,
-            this.document
-          )
+        const item = this.builder.edge.item(
+          referenceResult,
+          this.referenceResults,
+          this.document
         )
+        this.emitter.emit(item)
       }
     }
   }
@@ -226,45 +237,126 @@ class SymbolData {
     )
   }
 
-  // TODO: RESOLVER METHOD: different for union/intersection/transient types
   public addDefinition(
     sourceFile: ts.SourceFile,
     definition: DefinitionRange,
+    resolverType: ResolverType,
     recordAsReference = true
   ): void {
-    this.emitter.emit(this.builder.edge.next(definition, this.resultSet))
-    this.definitionRanges.push(definition)
-    if (recordAsReference) {
-      this.addReference(sourceFile, definition, ItemEdgeProperties.definitions)
+    switch (resolverType) {
+      // TODO
+      // case 'alias':
+      //   if (this.rename) {
+      //     super.addDefinition(sourceFile, definition, false)
+      //   } else {
+      //     this.emitter.emit(this.builder.edge.next(definition, this.resultSet))
+      //     this.aliased
+      //       .getOrCreatePartition(sourceFile)
+      //       .addReference(definition, ItemEdgeProperties.references)
+      //   }
+
+      // TODO
+      // case 'method':
+      // TODO - after the following
+      // if (this.bases !== undefined) {
+      //   for (let base of this.bases) {
+      //     base
+      //       .getOrCreatePartition(sourceFile)
+      //       .addReference(definition, ItemEdgeProperties.definitions)
+      //   }
+      // }
+
+      case 'transient':
+      case 'unionOrIntersection':
+        return
+
+      default:
+        this.emitter.emit(this.builder.edge.next(definition, this.resultSet))
+        this.definitionRanges.push(definition)
+        if (recordAsReference) {
+          this.addReference(
+            sourceFile,
+            definition,
+            ItemEdgeProperties.definitions,
+            resolverType
+          )
+        }
     }
   }
 
-  // TODO - always called with addDefinition
-  // TODO: RESOLVER METHOD: different for union/intersection/transient types
-  public recordDefinitionInfo(info: tss.DefinitionInfo): void {
-    this.definitionInfo.push(info)
+  public recordDefinitionInfo(
+    info: tss.DefinitionInfo,
+    resolverType: ResolverType
+  ): void {
+    switch (resolverType) {
+      case 'transient':
+      case 'unionOrIntersection':
+        return
+
+      default:
+        this.definitionInfo.push(info)
+    }
   }
 
-  // TODO: RESOLVER METHOD: different for union/intersection/transient types
   public addReference(
     sourceFile: ts.SourceFile,
     reference: Range | ReferenceResult,
-    property?: ReferenceRangesProperties
+    property: ReferenceRangesProperties,
+    resolverType: ResolverType
   ): void {
-    switch (reference.label) {
-      case VertexLabels.range:
-        this.emitter.emit(this.builder.edge.next(reference, this.resultSet))
-        if (property !== undefined) {
-          this.referenceRanges.set(
-            property,
-            (this.referenceRanges.get(property) || []).concat([reference])
-          )
-        }
-        break
+    switch (resolverType) {
+      // TODO
+      // case 'alias':
+      // if (reference.label === 'range') {
+      //     this.emitter.emit(this.builder.edge.next(reference, this.resultSet))
+      //   }
+      //   this.aliased
+      //     .getOrCreatePartition(sourceFile)
+      //     .addReference(reference as any, property as any)
+      // }
 
-      case VertexLabels.referenceResult:
-        this.referenceResults.push(reference)
-        break
+      // TODO
+      // case 'method':
+      //   if (this.bases !== undefined) {
+      //     if (reference.label === 'range') {
+      //       this.emitter.emit(this.builder.edge.next(reference, this.resultSet))
+      //     }
+      //     for (let base of this.bases) {
+      //       base
+      //         .getOrCreatePartition(sourceFile)
+      //         .addReference(reference as any, property as any)
+      //     }
+
+      //     break
+      //   }
+      // fallthrough
+
+      // TODO
+      // case 'unionOrIntersection':
+      //   if (reference.label === 'range') {
+      //     this.emitter.emit(this.builder.edge.next(reference, this.resultSet))
+      //   }
+      //   for (let element of this.elements) {
+      //     element
+      //       .getOrCreatePartition(sourceFile)
+      //       .addReference(reference as any, property as any)
+      //   }
+      //   break
+
+      default:
+        switch (reference.label) {
+          case VertexLabels.range:
+            this.emitter.emit(this.builder.edge.next(reference, this.resultSet))
+            this.referenceRanges.set(
+              property,
+              (this.referenceRanges.get(property) || []).concat([reference])
+            )
+            break
+
+          case VertexLabels.referenceResult:
+            this.referenceResults.push(reference)
+            break
+        }
     }
   }
 
@@ -284,6 +376,7 @@ class Indexer {
   private symbolDatas = new Map<string, SymbolData | null>()
   private currentSourceFile: ts.SourceFile | undefined
   private currentDocumentData: DocumentData | undefined
+  private symbols: Symbols
 
   public constructor(
     private builder: Builder,
@@ -293,11 +386,13 @@ class Indexer {
     private importLinker: ImportLinker,
     private exportLinker: ExportLinker | undefined,
     private languageService: ts.LanguageService,
-    // private projectRoot: string,
-    // private rootDir: string,
-    // private outDir: string,
+    private projectRoot: string,
+    private rootDir: string,
+    private outDir: string,
     private repositoryRoot: string
-  ) {}
+  ) {
+    this.symbols = new Symbols(this.program, this.typeChecker)
+  }
 
   public index(): void {
     const metadata = this.builder.vertex.metaData(
@@ -336,6 +431,13 @@ class Indexer {
     )
   }
 
+  private isFullContentIgnored(sourceFile: ts.SourceFile): boolean {
+    return (
+      tss.Program.isSourceFileDefaultLibrary(this.program, sourceFile) ||
+      tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)
+    )
+  }
+
   public visit(node: ts.Node): void {
     switch (node.kind) {
       case ts.SyntaxKind.SourceFile:
@@ -371,32 +473,41 @@ class Indexer {
           return
         }
 
-        const symbolData = this.getOrCreateSymbolData(symbol, node)
+        const resolverType = this.resolverType(symbol, node)
+
+        const symbolData = this.getOrCreateSymbolData(
+          symbol,
+          node,
+          resolverType
+        )
         if (!symbolData) {
           return
         }
 
-        const definitionInfo = tss.createDefinitionInfo(
-          this.currentSourceFile,
-          node
-        )
-        if (symbolData.hasDefinitionInfo(definitionInfo)) {
+        if (
+          symbolData.hasDefinitionInfo(
+            tss.createDefinitionInfo(this.currentSourceFile, node)
+          )
+        ) {
           return
         }
 
+        const tag: ReferenceTag = {
+          type: RangeTagTypes.reference,
+          text: node.getText(),
+        }
         const reference = this.builder.vertex.range(
           rangeFromNode(this.currentSourceFile, node),
-          {
-            type: RangeTagTypes.reference,
-            text: node.getText(),
-          }
+          tag
         )
 
+        this.emitter.emit(reference)
         this.currentDocumentData.addRange(reference)
         symbolData.addReference(
           this.currentSourceFile,
           reference,
-          ItemEdgeProperties.references
+          ItemEdgeProperties.references,
+          resolverType
         )
         return
     }
@@ -411,13 +522,6 @@ class Indexer {
     }
   }
 
-  private isFullContentIgnored(sourceFile: ts.SourceFile): boolean {
-    return (
-      tss.Program.isSourceFileDefaultLibrary(this.program, sourceFile) ||
-      tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)
-    )
-  }
-
   private getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
     const cachedDocumentData = this.documentDatas.get(sourceFile.fileName)
     if (cachedDocumentData) {
@@ -426,9 +530,17 @@ class Indexer {
 
     const document = this.builder.vertex.document(sourceFile.fileName, '')
 
-    // TODO - implement
-    const monikerPath: string | undefined = undefined
-    const externalLibrary = false
+    let monikerPath: string | undefined
+    let externalLibrary = false
+    if (tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)) {
+      externalLibrary = true
+      monikerPath = tss.computeMonikerPath(
+        this.projectRoot,
+        sourceFile.fileName
+      )
+    } else {
+      monikerPath = this.computeMonikerPath(sourceFile)
+    }
 
     const documentData = new DocumentData(
       this.builder,
@@ -442,9 +554,33 @@ class Indexer {
     return documentData
   }
 
+  private computeMonikerPath(sourceFile: ts.SourceFile): string | undefined {
+    // A real source file inside this project.
+    if (
+      !sourceFile.isDeclarationFile ||
+      (sourceFile.fileName.startsWith(this.rootDir) &&
+        sourceFile.fileName.charAt(this.rootDir.length) === '/')
+    ) {
+      return tss.computeMonikerPath(
+        this.projectRoot,
+        tss.toOutLocation(sourceFile.fileName, this.rootDir, this.outDir)
+      )
+    }
+    // TODO
+    // This can come from a dependent project.
+    // let fileName = sourceFile.fileName
+    // for (let outDir of this.dependentOutDirs) {
+    //   if (fileName.startsWith(outDir)) {
+    //     return tss.computeMonikerPath(this.projectRoot, sourceFile.fileName)
+    //   }
+    // }
+    return undefined
+  }
+
   private getOrCreateSymbolData(
     symbol: ts.Symbol,
-    location: ts.Node
+    node: ts.Node,
+    resolverType: ResolverType
   ): SymbolData {
     if (!this.currentDocumentData) {
       throw new Error('illegal symbol context')
@@ -463,9 +599,39 @@ class Indexer {
     )
     symbolData.begin()
 
-    // TODO - implement
-    const externalLibrary = false
-    const monikerIdentifier: string | undefined = undefined
+    //
+    //
+
+    const sourceFiles = this.getSourceFiles(symbol, node, resolverType)
+    const locationKind = this.symbols.getLocationKind(sourceFiles)
+    const exportPath: string | undefined = this.symbols.getExportPath(
+      symbol,
+      locationKind
+    )
+
+    let monikerPath: string | undefined | null
+    let externalLibrary = false
+    for (const sourceFile of sourceFiles.values()) {
+      const documentData = this.getOrCreateDocumentData(sourceFile)
+      if (monikerPath === undefined) {
+        monikerPath = documentData.monikerPath
+        externalLibrary = documentData.externalLibrary
+      } else if (monikerPath !== documentData.monikerPath) {
+        monikerPath = null
+      }
+    }
+
+    if (monikerPath === null) {
+      monikerPath = undefined
+      externalLibrary = false
+    }
+
+    let monikerIdentifier: string | undefined
+    if (tss.isSourceFile(symbol) && monikerPath !== undefined) {
+      monikerIdentifier = tss.createMonikerIdentifier(monikerPath, undefined)
+    } else if (exportPath !== undefined && exportPath !== '') {
+      monikerIdentifier = tss.createMonikerIdentifier(monikerPath, exportPath)
+    }
 
     if (monikerIdentifier) {
       if (externalLibrary) {
@@ -481,8 +647,12 @@ class Indexer {
       }
     }
 
-    for (const declaration of this.getDeclarations(symbol, location)) {
-      const textAndNode = this.getText(symbol, declaration)
+    for (const declaration of this.getDeclarations(
+      symbol,
+      node,
+      resolverType
+    )) {
+      const textAndNode = this.getText(symbol, declaration, resolverType)
       if (!textAndNode) {
         continue
       }
@@ -491,7 +661,8 @@ class Indexer {
         declaration,
         symbolData,
         textAndNode.text,
-        textAndNode.node
+        textAndNode.node,
+        resolverType
       )
     }
 
@@ -499,67 +670,112 @@ class Indexer {
     return symbolData
   }
 
-  // TODO: RESOLVER METHOD: [location] in some
-  private getDeclarations(
-    symbol: ts.Symbol,
-    location: ts.Node
-  ): ts.Declaration[] {
-    return symbol.getDeclarations() || []
+  // TODO - yuck!
+  private resolverType(symbol: ts.Symbol, node: ts.Node): ResolverType {
+    if (tss.isTransient(symbol)) {
+      if (tss.isComposite(this.typeChecker, symbol, node)) {
+        return 'unionOrIntersection'
+      }
+
+      // Problem: Symbols that come from the lib*.d.ts files are marked transient
+      // as well. Check if the symbol has some other meaningful flags
+      if ((symbol.getFlags() & ~ts.SymbolFlags.Transient) === 0) {
+        return 'transient'
+      }
+    }
+
+    return tss.isTypeAlias(symbol)
+      ? 'typeAlias'
+      : tss.isAliasSymbol(symbol)
+      ? 'alias'
+      : tss.isMethodSymbol(symbol)
+      ? 'method'
+      : 'standard'
   }
 
-  // TODO: RESOLVER METHOD: [location.getSourceFile()] in some
-  // private getSourceFiles(
-  //   symbol: ts.Symbol,
-  //   location: ts.Node
-  // ): ts.SourceFile[] {
-  //   return Array.from(
-  //     tss.getUniqueSourceFiles(symbol.getDeclarations()).values()
-  //   )
-  // }
+  private getDeclarations(
+    symbol: ts.Symbol,
+    node: ts.Node,
+    resolverType: ResolverType
+  ): ts.Node[] {
+    switch (resolverType) {
+      case 'transient':
+      case 'unionOrIntersection':
+        return [node]
 
-  // TODO: RESOLVER METHOD: [identifierNode, identifierText] = [declaration, declaration.getText()] in some
+      default:
+        return symbol.getDeclarations() || []
+    }
+  }
+
+  private getSourceFiles(
+    symbol: ts.Symbol,
+    node: ts.Node,
+    resolverType: ResolverType
+  ): ts.SourceFile[] {
+    switch (resolverType) {
+      case 'transient':
+      case 'unionOrIntersection':
+        return [node.getSourceFile()]
+
+      default:
+        return Array.from(
+          tss.getUniqueSourceFiles(symbol.getDeclarations()).values()
+        )
+    }
+  }
+
   private getText(
     symbol: ts.Symbol,
-    declaration: ts.Declaration
+    node: ts.Node,
+    resolverType: ResolverType
   ): { text: string; node: ts.Node } | undefined {
-    if (tss.isNamedDeclaration(declaration)) {
-      return {
-        text: declaration.name.getText(),
-        node: declaration.name,
-      }
-    }
+    switch (resolverType) {
+      case 'unionOrIntersection':
+        return { text: node.getText(), node }
 
-    if (tss.isValueModule(symbol) && ts.isSourceFile(declaration)) {
-      return {
-        text: '',
-        node: declaration,
-      }
-    }
+      default:
+        if (tss.isNamedDeclaration(node)) {
+          return {
+            text: node.name.getText(),
+            node: node.name,
+          }
+        }
 
-    return undefined
+        if (tss.isValueModule(symbol) && ts.isSourceFile(node)) {
+          return { text: '', node }
+        }
+
+        return undefined
+    }
   }
 
   private emitDefinition(
-    declaration: ts.Declaration,
+    declaration: ts.Node,
     symbolData: SymbolData,
     text: string,
-    node: ts.Node
+    node: ts.Node,
+    resolverType: ResolverType
   ): void {
     const sourceFile = declaration.getSourceFile()
     const documentData = this.getOrCreateDocumentData(sourceFile)
     const range = ts.isSourceFile(declaration)
       ? phantomRange
       : rangeFromNode(sourceFile, node)
-    const definitionTag: DefinitionTag = {
+    const tag: DefinitionTag = {
       type: RangeTagTypes.definition,
       text,
       kind: asSymbolKind(declaration),
       fullRange: rangeFromNode(sourceFile, declaration),
     }
-    const definition = this.builder.vertex.range(range, definitionTag)
+    const definition = this.builder.vertex.range(range, tag)
+    this.emitter.emit(definition)
     documentData.addRange(definition)
-    symbolData.addDefinition(sourceFile, definition)
-    symbolData.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))
+    symbolData.addDefinition(sourceFile, definition, resolverType)
+    symbolData.recordDefinitionInfo(
+      tss.createDefinitionInfo(sourceFile, node),
+      resolverType
+    )
     if (tss.isNamedDeclaration(declaration)) {
       const hover = getHover(this.languageService, declaration.name, sourceFile)
       if (hover) {
@@ -647,18 +863,18 @@ async function run(args: string[]): Promise<void> {
     throw new Error("Couldn't create language service with underlying program.")
   }
   const typeChecker = program.getTypeChecker()
-  // const compilerOptions = program.getCompilerOptions()
+  const compilerOptions = program.getCompilerOptions()
 
-  // const rootDir =
-  //   compilerOptions.rootDir !== undefined
-  //     ? tss.makeAbsolute(compilerOptions.rootDir, currentDirectory)
-  //     : compilerOptions.baseUrl !== undefined
-  //     ? tss.makeAbsolute(compilerOptions.baseUrl, currentDirectory)
-  //     : tss.normalizePath(tss.Program.getCommonSourceDirectory(program))
-  // const outDir =
-  //   compilerOptions.outDir !== undefined
-  //     ? tss.makeAbsolute(compilerOptions.outDir, currentDirectory)
-  //     : rootDir
+  const rootDir =
+    compilerOptions.rootDir !== undefined
+      ? tss.makeAbsolute(compilerOptions.rootDir, currentDirectory)
+      : compilerOptions.baseUrl !== undefined
+      ? tss.makeAbsolute(compilerOptions.baseUrl, currentDirectory)
+      : tss.normalizePath(tss.Program.getCommonSourceDirectory(program))
+  const outDir =
+    compilerOptions.outDir !== undefined
+      ? tss.makeAbsolute(compilerOptions.outDir, currentDirectory)
+      : rootDir
 
   let counter = 1
   const idGenerator = () => counter++
@@ -683,9 +899,9 @@ async function run(args: string[]): Promise<void> {
     importLinker,
     exportLinker,
     languageService,
-    // projectRoot,
-    // rootDir,
-    // outDir,
+    projectRoot,
+    rootDir,
+    outDir,
     repositoryRoot
   )
 

@@ -1025,7 +1025,7 @@ interface SymbolAlias {
   name: string
 }
 
-class Symbols {
+export class Symbols {
   private baseSymbolCache: LRUCache<string, ts.Symbol[]>
   private baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>
   private exportedPaths: LRUCache<ts.Symbol, string | null>
