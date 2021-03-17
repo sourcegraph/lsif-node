@@ -15,7 +15,7 @@ import {
 } from 'lsif-protocol'
 import * as path from 'path'
 import ts from 'typescript-lsif'
-import { create as createEmitter } from './emitter'
+import { create as createEmitter, Emitter } from './emitter'
 import { Builder } from './graph'
 import PackageJson from './package'
 import * as tss from './typescripts'
@@ -125,6 +125,208 @@ const makeLanguageServiceHost = (
   }
 }
 
+class DocumentData {
+  private ranges: Range[] = []
+
+  public constructor(
+    private builder: Builder,
+    private emitter: Emitter,
+    public document: Document,
+    public monikerPath: string | undefined,
+    public externalLibrary: boolean
+  ) {}
+
+  public addRange(range: Range): void {
+    this.emitter.emit(range)
+    this.ranges.push(range)
+  }
+
+  public begin(): void {
+    this.emitter.emit(this.document)
+  }
+
+  public end(): void {
+    if (this.ranges.length >= 0) {
+      this.emitter.emit(this.builder.edge.contains(this.document, this.ranges))
+    }
+  }
+}
+
+class SymbolData {
+  private definitionInfo: tss.DefinitionInfo | tss.DefinitionInfo[] | undefined
+
+  private resultSet: ResultSet
+  private definitionResult: DefinitionResult | undefined
+  private referenceResult: ReferenceResult | undefined
+  private definitionRanges: DefinitionRange[] = []
+  private referenceRanges: Map<
+    | ItemEdgeProperties.declarations
+    | ItemEdgeProperties.definitions
+    | ItemEdgeProperties.references,
+    Range[]
+  > = new Map()
+  private referenceResults: ReferenceResult[] = []
+
+  public constructor(
+    private builder: Builder,
+    private emitter: Emitter,
+    private document: Document
+  ) {
+    this.resultSet = this.builder.vertex.resultSet()
+  }
+
+  public recordDefinitionInfo(info: tss.DefinitionInfo): void {
+    // TODO - different if union/intersection/transient type
+    // TODO
+    if (this.definitionInfo === undefined) {
+      this.definitionInfo = info
+    } else if (Array.isArray(this.definitionInfo)) {
+      this.definitionInfo.push(info)
+    } else {
+      this.definitionInfo = [this.definitionInfo]
+      this.definitionInfo.push(info)
+    }
+  }
+
+  public hasDefinitionInfo(info: tss.DefinitionInfo): boolean {
+    if (this.definitionInfo === undefined) {
+      return false
+    }
+
+    // TODO
+    if (Array.isArray(this.definitionInfo)) {
+      for (const item of this.definitionInfo) {
+        if (tss.DefinitionInfo.equals(item, info)) {
+          return true
+        }
+      }
+      return false
+    }
+
+    return tss.DefinitionInfo.equals(this.definitionInfo, info)
+  }
+
+  public addHover(hover: lsp.Hover): void {
+    const hr = this.builder.vertex.hoverResult(hover)
+    this.emitter.emit(hr)
+    this.emitter.emit(this.builder.edge.hover(this.resultSet, hr))
+  }
+
+  // TODO - missing things for other resolver classes
+  public addDefinition(
+    sourceFile: ts.SourceFile,
+    definition: DefinitionRange,
+    recordAsReference = true
+  ): void {
+    this.emitter.emit(this.builder.edge.next(definition, this.resultSet))
+
+    this.definitionRanges.push(definition)
+    if (recordAsReference) {
+      this.addReference(sourceFile, definition, ItemEdgeProperties.definitions)
+    }
+  }
+
+  // TODO - missing things for other resolver classes
+  public addReference(
+    sourceFile: ts.SourceFile,
+    reference: Range | ReferenceResult,
+    property?:
+      | ItemEdgeProperties.declarations
+      | ItemEdgeProperties.definitions
+      | ItemEdgeProperties.references
+  ): void {
+    if (reference.label === 'range') {
+      this.emitter.emit(this.builder.edge.next(reference, this.resultSet))
+    }
+
+    if (reference.label === 'range' && property !== undefined) {
+      let values = this.referenceRanges.get(property)
+      if (values === undefined) {
+        values = []
+        this.referenceRanges.set(property, values)
+      }
+      values.push(reference)
+    } else if (reference.label === 'referenceResult') {
+      this.referenceResults.push(reference)
+    }
+  }
+
+  //
+  // TODO - skip and only do import/export linkers
+  public addMoniker(identifier: string, kind: MonikerKind): Moniker {
+    const moniker = this.builder.vertex.moniker('tsc', identifier, kind)
+    this.emitter.emit(moniker)
+    this.emitter.emit(this.builder.edge.moniker(this.resultSet, moniker))
+    return moniker
+  }
+
+  public getOrCreateDefinitionResult(): DefinitionResult {
+    if (this.definitionResult === undefined) {
+      this.definitionResult = this.builder.vertex.definitionResult()
+      this.emitter.emit(this.definitionResult)
+      this.emitter.emit(
+        this.builder.edge.definition(this.resultSet, this.definitionResult)
+      )
+    }
+
+    return this.definitionResult
+  }
+
+  public getOrCreateReferenceResult(): ReferenceResult {
+    if (this.referenceResult === undefined) {
+      this.referenceResult = this.builder.vertex.referencesResult()
+      this.emitter.emit(this.referenceResult)
+      this.emitter.emit(
+        this.builder.edge.references(this.resultSet, this.referenceResult)
+      )
+    }
+
+    return this.referenceResult
+  }
+
+  public begin(): void {
+    this.emitter.emit(this.resultSet)
+  }
+
+  public end(): void {
+    if (this.definitionRanges.length > 0) {
+      const definitionResult = this.getOrCreateDefinitionResult()
+      this.emitter.emit(
+        this.builder.edge.item(
+          definitionResult,
+          this.definitionRanges,
+          this.document
+        )
+      )
+    }
+
+    if (this.referenceRanges.size > 0) {
+      const referenceResult = this.getOrCreateReferenceResult()
+      for (const property of this.referenceRanges.keys()) {
+        const values = this.referenceRanges.get(property)!
+        this.emitter.emit(
+          this.builder.edge.item(
+            referenceResult,
+            values,
+            this.document,
+            property
+          )
+        )
+      }
+    }
+    if (this.referenceResults.length > 0) {
+      const referenceResult = this.getOrCreateReferenceResult()
+      this.emitter.emit(
+        this.builder.edge.item(
+          referenceResult,
+          this.referenceResults,
+          this.document
+        )
+      )
+    }
+  }
+}
+
 //
 //
 
@@ -231,61 +433,25 @@ async function run(args: string[]): Promise<void> {
   })
 
   const importLinker = new ImportLinker(projectRoot, emitter, idGenerator)
-  let exportLinker: ExportLinker | undefined
-  if (packageJson !== undefined) {
-    exportLinker = new ExportLinker(
-      projectRoot,
-      packageJson,
-      emitter,
-      idGenerator
-    )
-  }
+  const exportLinker =
+    packageJson &&
+    new ExportLinker(projectRoot, packageJson, emitter, idGenerator)
 
   // TODO
   // console.log({ references: program.getResolvedProjectReferences() })
 
-  const toolInfo = {
-    name: 'lsif-tsc',
-    args: ts.sys.args,
+  const metadata = builder.vertex.metaData(
     version,
-  }
-  emitter.emit(
-    builder.vertex.metaData(
-      version,
-      URI.file(repositoryRoot).toString(true),
-      toolInfo
-    )
+    URI.file(repositoryRoot).toString(true),
+    { name: 'lsif-tsc', args: ts.sys.args, version }
   )
+  emitter.emit(metadata)
+
   const project = builder.vertex.project()
   emitter.emit(project)
 
   let currentSourceFile: ts.SourceFile | undefined
   let currentDocumentData: DocumentData | undefined
-
-  class DocumentData {
-    private ranges: Range[] = []
-
-    public constructor(
-      public document: Document,
-      public monikerPath: string | undefined,
-      public externalLibrary: boolean
-    ) {}
-
-    public addRange(range: Range): void {
-      emitter.emit(range)
-      this.ranges.push(range)
-    }
-
-    public begin(): void {
-      emitter.emit(this.document)
-    }
-
-    public end(): void {
-      if (this.ranges.length >= 0) {
-        emitter.emit(builder.edge.contains(this.document, this.ranges))
-      }
-    }
-  }
 
   const documentDatas = new Map<string, DocumentData | null>()
 
@@ -334,6 +500,8 @@ async function run(args: string[]): Promise<void> {
     }
 
     const documentData = new DocumentData(
+      builder,
+      emitter,
       document,
       monikerPath,
       externalLibrary
@@ -343,178 +511,6 @@ async function run(args: string[]): Promise<void> {
     return documentData
   }
 
-  class SymbolData {
-    private definitionInfo:
-      | tss.DefinitionInfo
-      | tss.DefinitionInfo[]
-      | undefined
-
-    private resultSet: ResultSet
-    private definitionResult: DefinitionResult | undefined
-    private referenceResult: ReferenceResult | undefined
-    private definitionRanges: DefinitionRange[] = []
-    private referenceRanges: Map<
-      | ItemEdgeProperties.declarations
-      | ItemEdgeProperties.definitions
-      | ItemEdgeProperties.references,
-      Range[]
-    > = new Map()
-    private referenceResults: ReferenceResult[] = []
-
-    public constructor(private document: Document) {
-      this.resultSet = builder.vertex.resultSet()
-    }
-
-    public recordDefinitionInfo(info: tss.DefinitionInfo): void {
-      // TODO - different if union/intersection/transient type
-      // TODO
-      if (this.definitionInfo === undefined) {
-        this.definitionInfo = info
-      } else if (Array.isArray(this.definitionInfo)) {
-        this.definitionInfo.push(info)
-      } else {
-        this.definitionInfo = [this.definitionInfo]
-        this.definitionInfo.push(info)
-      }
-    }
-
-    public hasDefinitionInfo(info: tss.DefinitionInfo): boolean {
-      if (this.definitionInfo === undefined) {
-        return false
-      }
-
-      // TODO
-      if (Array.isArray(this.definitionInfo)) {
-        for (const item of this.definitionInfo) {
-          if (tss.DefinitionInfo.equals(item, info)) {
-            return true
-          }
-        }
-        return false
-      }
-
-      return tss.DefinitionInfo.equals(this.definitionInfo, info)
-    }
-
-    public addHover(hover: lsp.Hover): void {
-      const hr = builder.vertex.hoverResult(hover)
-      emitter.emit(hr)
-      emitter.emit(builder.edge.hover(this.resultSet, hr))
-    }
-
-    // TODO - missing things for other resolver classes
-    public addDefinition(
-      sourceFile: ts.SourceFile,
-      definition: DefinitionRange,
-      recordAsReference = true
-    ): void {
-      emitter.emit(builder.edge.next(definition, this.resultSet))
-
-      this.definitionRanges.push(definition)
-      if (recordAsReference) {
-        this.addReference(
-          sourceFile,
-          definition,
-          ItemEdgeProperties.definitions
-        )
-      }
-    }
-
-    // TODO - missing things for other resolver classes
-    public addReference(
-      sourceFile: ts.SourceFile,
-      reference: Range | ReferenceResult,
-      property?:
-        | ItemEdgeProperties.declarations
-        | ItemEdgeProperties.definitions
-        | ItemEdgeProperties.references
-    ): void {
-      if (reference.label === 'range') {
-        emitter.emit(builder.edge.next(reference, this.resultSet))
-      }
-
-      if (reference.label === 'range' && property !== undefined) {
-        let values = this.referenceRanges.get(property)
-        if (values === undefined) {
-          values = []
-          this.referenceRanges.set(property, values)
-        }
-        values.push(reference)
-      } else if (reference.label === 'referenceResult') {
-        this.referenceResults.push(reference)
-      }
-    }
-
-    //
-    // TODO - skip and only do import/export linkers
-    public addMoniker(identifier: string, kind: MonikerKind): Moniker {
-      const moniker = builder.vertex.moniker('tsc', identifier, kind)
-      emitter.emit(moniker)
-      emitter.emit(builder.edge.moniker(this.resultSet, moniker))
-      return moniker
-    }
-
-    public getOrCreateDefinitionResult(): DefinitionResult {
-      if (this.definitionResult === undefined) {
-        this.definitionResult = builder.vertex.definitionResult()
-        emitter.emit(this.definitionResult)
-        emitter.emit(
-          builder.edge.definition(this.resultSet, this.definitionResult)
-        )
-      }
-
-      return this.definitionResult
-    }
-
-    public getOrCreateReferenceResult(): ReferenceResult {
-      if (this.referenceResult === undefined) {
-        this.referenceResult = builder.vertex.referencesResult()
-        emitter.emit(this.referenceResult)
-        emitter.emit(
-          builder.edge.references(this.resultSet, this.referenceResult)
-        )
-      }
-
-      return this.referenceResult
-    }
-
-    public begin(): void {
-      emitter.emit(this.resultSet)
-    }
-
-    public end(): void {
-      if (this.definitionRanges.length > 0) {
-        const definitionResult = this.getOrCreateDefinitionResult()
-        emitter.emit(
-          builder.edge.item(
-            definitionResult,
-            this.definitionRanges,
-            this.document
-          )
-        )
-      }
-
-      if (this.referenceRanges.size > 0) {
-        const referenceResult = this.getOrCreateReferenceResult()
-        for (const property of this.referenceRanges.keys()) {
-          const values = this.referenceRanges.get(property)!
-          emitter.emit(
-            builder.edge.item(referenceResult, values, this.document, property)
-          )
-        }
-      }
-      if (this.referenceResults.length > 0) {
-        const referenceResult = this.getOrCreateReferenceResult()
-        emitter.emit(
-          builder.edge.item(
-            referenceResult,
-            this.referenceResults,
-            this.document
-          )
-        )
-      }
-    }
-  }
   const symbolDatas = new Map<string, SymbolData | null>()
 
   const getOrCreateSymbolData = (
@@ -538,7 +534,11 @@ async function run(args: string[]): Promise<void> {
     )
 
     // TODO - share nicely
-    const symbolData = new SymbolData(currentDocumentData!.document)
+    const symbolData = new SymbolData(
+      builder,
+      emitter,
+      currentDocumentData!.document
+    )
     symbolData.begin()
 
     let monikerPath: string | undefined | null
@@ -629,26 +629,26 @@ async function run(args: string[]): Promise<void> {
     return symbolData
   }
 
-  const handleSymbol = (symbol: ts.Symbol | undefined, location: ts.Node) => {
+  const handleSymbol = (symbol: ts.Symbol | undefined, node: ts.Node) => {
     if (!symbol || !currentSourceFile || !currentDocumentData) {
       return
     }
 
-    const symbolData = getOrCreateSymbolData(symbol, location)
+    const symbolData = getOrCreateSymbolData(symbol, node)
     if (!symbolData) {
       return
     }
 
-    const definitionInfo = tss.createDefinitionInfo(currentSourceFile, location)
+    const definitionInfo = tss.createDefinitionInfo(currentSourceFile, node)
     if (symbolData.hasDefinitionInfo(definitionInfo)) {
       return
     }
 
     const reference = builder.vertex.range(
-      rangeFromNode(currentSourceFile, location),
+      rangeFromNode(currentSourceFile, node),
       {
         type: RangeTagTypes.reference,
-        text: location.getText(),
+        text: node.getText(),
       }
     )
 
