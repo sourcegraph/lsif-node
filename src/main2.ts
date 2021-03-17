@@ -139,28 +139,6 @@ async function run(args: string[]): Promise<void> {
   const emitter = createEmitter(writer)
   const typingsInstaller = new TypingsInstaller() // TODO - per project
 
-  let counter = 1
-  const idGenerator = () => counter++
-  const builder = new Builder({
-    idGenerator,
-    emitSource: false,
-  })
-
-  const toolInfo = {
-    name: 'lsif-tsc',
-    args: ts.sys.args,
-    version,
-  }
-  emitter.emit(
-    builder.vertex.metaData(
-      version,
-      URI.file(repositoryRoot).toString(true),
-      toolInfo
-    )
-  )
-  const project = builder.vertex.project()
-  emitter.emit(project)
-
   let tsconfigFileName: string | undefined
   let config: ts.ParsedCommandLine = ts.parseCommandLine(args)
   if (config.options.project) {
@@ -228,8 +206,8 @@ async function run(args: string[]): Promise<void> {
     throw new Error("Couldn't create language service with underlying program.")
   }
   const typeChecker = program.getTypeChecker()
-
   const compilerOptions = program.getCompilerOptions()
+
   const rootDir =
     compilerOptions.rootDir !== undefined
       ? tss.makeAbsolute(compilerOptions.rootDir, currentDirectory)
@@ -240,6 +218,17 @@ async function run(args: string[]): Promise<void> {
     compilerOptions.outDir !== undefined
       ? tss.makeAbsolute(compilerOptions.outDir, currentDirectory)
       : rootDir
+
+  const isFullContentIgnored = (sourceFile: ts.SourceFile): boolean =>
+    tss.Program.isSourceFileDefaultLibrary(program, sourceFile) ||
+    tss.Program.isSourceFileFromExternalLibrary(program, sourceFile)
+
+  let counter = 1
+  const idGenerator = () => counter++
+  const builder = new Builder({
+    idGenerator,
+    emitSource: false,
+  })
 
   const importLinker = new ImportLinker(projectRoot, emitter, idGenerator)
   let exportLinker: ExportLinker | undefined
@@ -255,9 +244,20 @@ async function run(args: string[]): Promise<void> {
   // TODO
   // console.log({ references: program.getResolvedProjectReferences() })
 
-  const isFullContentIgnored = (sourceFile: ts.SourceFile): boolean =>
-    tss.Program.isSourceFileDefaultLibrary(program, sourceFile) ||
-    tss.Program.isSourceFileFromExternalLibrary(program, sourceFile)
+  const toolInfo = {
+    name: 'lsif-tsc',
+    args: ts.sys.args,
+    version,
+  }
+  emitter.emit(
+    builder.vertex.metaData(
+      version,
+      URI.file(repositoryRoot).toString(true),
+      toolInfo
+    )
+  )
+  const project = builder.vertex.project()
+  emitter.emit(project)
 
   let currentSourceFile: ts.SourceFile | undefined
   let currentDocumentData: DocumentData | undefined
