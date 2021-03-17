@@ -95,8 +95,6 @@ const getHover = (
 //
 //
 
-const version = '0.0.1'
-
 async function run(args: string[]): Promise<void> {
   const packageFile = tss.makeAbsolute('package.json')
   const packageJson: PackageJson | undefined = PackageJson.read(packageFile)
@@ -261,26 +259,6 @@ async function run(args: string[]): Promise<void> {
   const isFullContentIgnored = (sourceFile: ts.SourceFile): boolean =>
     tss.Program.isSourceFileDefaultLibrary(program, sourceFile) ||
     tss.Program.isSourceFileFromExternalLibrary(program, sourceFile)
-
-  const getHover = (
-    node: ts.DeclarationName,
-    sourceFile?: ts.SourceFile
-  ): lsp.Hover | undefined => {
-    if (sourceFile === undefined) {
-      sourceFile = node.getSourceFile()
-    }
-
-    try {
-      const quickInfo = languageService.getQuickInfoAtPosition(node, sourceFile)
-      if (quickInfo !== undefined) {
-        return asHover(sourceFile, quickInfo)
-      }
-    } catch (err) {
-      // fallthrough
-    }
-
-    return undefined
-  }
 
   let currentSourceFile: ts.SourceFile | undefined
   let currentDocumentData: DocumentData | undefined
@@ -641,7 +619,7 @@ async function run(args: string[]): Promise<void> {
         tss.createDefinitionInfo(sourceFile, identifierNode)
       )
       if (tss.isNamedDeclaration(declaration)) {
-        const hover = getHover(declaration.name, sourceFile)
+        const hover = getHover(languageService, declaration.name, sourceFile)
         if (hover) {
           symbolData.addHover(hover)
         }
