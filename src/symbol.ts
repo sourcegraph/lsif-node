@@ -12,7 +12,7 @@ import {
 } from 'lsif-protocol'
 import ts from 'typescript-lsif'
 import { Emitter } from './writer'
-import * as tss from '../typescripts'
+import * as tss from './typescripts'
 
 type ReferenceRangesProperties =
     | ItemEdgeProperties.declarations

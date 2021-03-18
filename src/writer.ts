@@ -1,7 +1,7 @@
 import * as fs from 'fs'
-import PackageJson from '../package'
+import PackageJson from './package'
 import * as os from 'os'
-import { EdgeBuilder, VertexBuilder } from '../graph'
+import { EdgeBuilder, VertexBuilder } from './graph'
 import * as path from 'path'
 import {
     Edge,
@@ -257,14 +257,6 @@ export class Emitter {
             inV,
         }
     }
-}
-
-export const makeWriterContext = (
-    filename: string,
-    projectRoot: string,
-    packageJson?: PackageJson
-): Emitter => {
-    return new Emitter(filename, projectRoot, packageJson)
 }
 
 export const separator: string = ':'

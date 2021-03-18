@@ -1,7 +1,7 @@
 import * as path from 'path'
 import ts from 'typescript-lsif'
-import PackageJson from '../package'
-import * as tss from '../typescripts'
+import PackageJson from './package'
+import * as tss from './typescripts'
 
 export const loadPackageJson = (): {
     packageJson?: PackageJson

@@ -53,7 +53,6 @@ import {
     packageInformation,
     MonikerKind,
     ItemEdgeProperties,
-    Event,
     EventKind,
     EventScope,
     DocumentEvent,
@@ -89,8 +88,11 @@ export class VertexBuilder {
 
     public event(kind: EventKind, scope: Project): ProjectEvent
     public event(kind: EventKind, scope: Document): DocumentEvent
-    public event(kind: EventKind, scope: Project | Document): Event {
-        let result: ProjectEvent | DocumentEvent = {
+    public event(
+        kind: EventKind,
+        scope: Project | Document
+    ): ProjectEvent | DocumentEvent {
+        return {
             id: this.nextId(),
             type: ElementTypes.vertex,
             label: VertexLabels.event,
@@ -101,28 +103,25 @@ export class VertexBuilder {
                     : EventScope.document,
             data: scope.id,
         }
-        return result
     }
 
-    public project(contents?: string): Project {
-        let result: Project = {
+    public project(): Project {
+        return {
             id: this.nextId(),
             type: ElementTypes.vertex,
             label: VertexLabels.project,
             kind: 'typescript',
         }
-        return result
     }
 
-    public document(path: string, contents?: string): Document {
-        let result: Document = {
+    public document(path: string): Document {
+        return {
             id: this.nextId(),
             type: ElementTypes.vertex,
             label: VertexLabels.document,
             uri: URI.file(makeAbsolute(path)).toString(true),
             languageId: 'typescript',
         }
-        return result
     }
 
     public moniker(
@@ -154,12 +153,11 @@ export class VertexBuilder {
     }
 
     public resultSet(): ResultSet {
-        let result: ResultSet = {
+        return {
             id: this.nextId(),
             type: ElementTypes.vertex,
             label: VertexLabels.resultSet,
         }
-        return result
     }
 
     public range(range: lsp.Range, tag: UnknownTag): Range
@@ -167,17 +165,14 @@ export class VertexBuilder {
     public range(range: lsp.Range, tag: DefinitionTag): DefinitionRange
     public range(range: lsp.Range, tag: ReferenceTag): ReferenceRange
     public range(range: lsp.Range, tag?: RangeTag): Range {
-        let result: Range = {
+        return {
             id: this.nextId(),
             type: ElementTypes.vertex,
             label: VertexLabels.range,
             start: range.start,
             end: range.end,
+            ...(tag ? { tag } : {}),
         }
-        if (tag !== undefined) {
-            result.tag = tag
-        }
-        return result
     }
 
     public location(range: lsp.Range): Location {
@@ -185,7 +180,7 @@ export class VertexBuilder {
             id: this.nextId(),
             type: ElementTypes.vertex,
             label: VertexLabels.location,
-            range: range,
+            range,
         }
     }
 
@@ -239,18 +234,17 @@ export class VertexBuilder {
                     range: value.range,
                 },
             }
-        } else {
-            return {
-                id: this.nextId(),
-                type: ElementTypes.vertex,
-                label: VertexLabels.hoverResult,
-                result: {
-                    contents: value as
-                        | lsp.MarkupContent
-                        | lsp.MarkedString
-                        | lsp.MarkedString[],
-                },
-            }
+        }
+        return {
+            id: this.nextId(),
+            type: ElementTypes.vertex,
+            label: VertexLabels.hoverResult,
+            result: {
+                contents: value as
+                    | lsp.MarkupContent
+                    | lsp.MarkedString
+                    | lsp.MarkedString[],
+            },
         }
     }
 
@@ -324,8 +318,6 @@ export class EdgeBuilder {
         }
     }
 
-    public next(from: Range, to: ResultSet): next
-    public next(from: ResultSet, to: ResultSet): next
     public next(from: Range | ResultSet, to: ResultSet): next {
         return {
             id: this.nextId(),
@@ -336,8 +328,6 @@ export class EdgeBuilder {
         }
     }
 
-    public moniker(from: ResultSet, to: Moniker): moniker
-    public moniker(from: Range, to: Moniker): moniker
     public moniker(from: Range | ResultSet, to: Moniker): moniker {
         return {
             id: this.nextId(),
@@ -475,16 +465,13 @@ export class EdgeBuilder {
         }
     }
 
-    public item(from: DeclarationResult, to: Range[], document: Document): item
-    public item(from: DefinitionResult, to: Range[], document: Document): item
     public item(
-        from: TypeDefinitionResult,
+        from:
+            | DeclarationResult
+            | DefinitionResult
+            | TypeDefinitionResult
+            | ImplementationResult,
         to: Range[],
-        document: Document
-    ): item
-    public item(
-        from: ReferenceResult,
-        to: ReferenceResult[],
         document: Document
     ): item
     public item(
@@ -497,8 +484,8 @@ export class EdgeBuilder {
             | ItemEdgeProperties.references
     ): item
     public item(
-        from: ImplementationResult,
-        to: Range[],
+        from: ReferenceResult,
+        to: ReferenceResult[],
         document: Document
     ): item
     public item(

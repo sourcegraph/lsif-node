@@ -8,6 +8,8 @@ import * as path from 'path'
 import * as _fs from 'fs'
 import { load, commands } from 'npm'
 
+import ts from 'typescript-lsif'
+
 namespace fs {
     export const exist = promisify(_fs.exists)
     export const readFile = promisify(_fs.readFile)
@@ -310,4 +312,22 @@ export class TypingsInstaller {
             })
         })
     }
+}
+
+export const inferTypings = async (
+    config: ts.ParsedCommandLine,
+    projectRoot: string,
+    tsconfigFileName: string | undefined,
+    currentDirectory: string
+): Promise<void> => {
+    const typingsInstaller = new TypingsInstaller()
+
+    // TODO - make calls uniform
+    await (config.options.types
+        ? typingsInstaller.installTypings(
+              projectRoot,
+              tsconfigFileName || process.cwd(),
+              config.options.types
+          )
+        : typingsInstaller.guessTypings(projectRoot, currentDirectory))
 }
