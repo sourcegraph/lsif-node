@@ -61,7 +61,16 @@ export class Indexer {
     this.writerContext.emitter.emit(project)
 
     for (const sourceFile of this.programContext.program.getSourceFiles()) {
-      if (this.isFullContentIgnored(sourceFile)) {
+      if (
+        tss.Program.isSourceFileDefaultLibrary(
+          this.programContext.program,
+          sourceFile
+        ) ||
+        tss.Program.isSourceFileFromExternalLibrary(
+          this.programContext.program,
+          sourceFile
+        )
+      ) {
         continue
       }
 
@@ -86,105 +95,100 @@ export class Indexer {
     )
   }
 
-  private isFullContentIgnored(sourceFile: ts.SourceFile): boolean {
-    return (
-      tss.Program.isSourceFileDefaultLibrary(
-        this.programContext.program,
-        sourceFile
-      ) ||
-      tss.Program.isSourceFileFromExternalLibrary(
-        this.programContext.program,
-        sourceFile
-      )
-    )
+  private visit(node: ts.Node): void {
+    if (this.preVisit(node)) {
+      node.forEachChild(this.visit.bind(this))
+      this.postVisit(node)
+    }
   }
 
-  public visit(node: ts.Node): void {
+  private preVisit(node: ts.Node): boolean {
     switch (node.kind) {
       case ts.SyntaxKind.SourceFile:
         this.currentSourceFile = node as ts.SourceFile
         this.currentDocumentData = this.getOrCreateDocumentData(
           this.currentSourceFile
         )
-        break
+        return true
 
-      case ts.SyntaxKind.ModuleDeclaration:
-        // TODO - need to do export things?
-        break
+      // TODO - need to do export things?
+      // case ts.SyntaxKind.ModuleDeclaration:
+      //   break
 
-      case ts.SyntaxKind.ClassDeclaration:
-      case ts.SyntaxKind.InterfaceDeclaration:
-      case ts.SyntaxKind.TypeParameter:
-      case ts.SyntaxKind.MethodDeclaration:
-      case ts.SyntaxKind.MethodSignature:
-      case ts.SyntaxKind.FunctionDeclaration:
-      case ts.SyntaxKind.Parameter:
-        // TODO - visit declaration (for document symbols only)
-        break
+      // TODO - visit declaration (for document symbols only)
+      // case ts.SyntaxKind.ClassDeclaration:
+      // case ts.SyntaxKind.InterfaceDeclaration:
+      // case ts.SyntaxKind.TypeParameter:
+      // case ts.SyntaxKind.MethodDeclaration:
+      // case ts.SyntaxKind.MethodSignature:
+      // case ts.SyntaxKind.FunctionDeclaration:
+      // case ts.SyntaxKind.Parameter:
+      //   break
 
       case ts.SyntaxKind.ExportAssignment:
       case ts.SyntaxKind.Identifier:
       case ts.SyntaxKind.StringLiteral:
-        if (!this.currentSourceFile || !this.currentDocumentData) {
-          return
-        }
+        this.visitSymbol(node)
+        return false
 
-        const symbol = this.programContext.typeChecker.getSymbolAtLocation(node)
-        if (!symbol) {
-          return
-        }
+      default:
+        return true
+    }
+  }
 
-        const resolverType = getResolverType(
-          this.programContext.typeChecker,
-          symbol,
-          node
-        )
+  private postVisit(node: ts.Node): void {
+    if (node.kind === ts.SyntaxKind.SourceFile) {
+      this.currentSourceFile = undefined
+      this.currentDocumentData = undefined
+    }
+  }
 
-        const symbolData = this.getOrCreateSymbolData(
-          symbol,
-          node,
-          resolverType
-        )
-        if (!symbolData) {
-          return
-        }
-
-        if (
-          symbolData.hasDefinitionInfo(
-            tss.createDefinitionInfo(this.currentSourceFile, node)
-          )
-        ) {
-          return
-        }
-
-        const tag: ReferenceTag = {
-          type: RangeTagTypes.reference,
-          text: node.getText(),
-        }
-        const reference = this.writerContext.builder.vertex.range(
-          rangeFromNode(this.currentSourceFile, node),
-          tag
-        )
-
-        this.writerContext.emitter.emit(reference)
-        this.currentDocumentData.addRange(reference)
-        symbolData.addReference(
-          this.currentSourceFile,
-          reference,
-          ItemEdgeProperties.references,
-          resolverType
-        )
-        return
+  private visitSymbol(node: ts.Node): void {
+    if (!this.currentSourceFile || !this.currentDocumentData) {
+      return
     }
 
-    node.forEachChild((child) => this.visit(child))
-
-    switch (node.kind) {
-      case ts.SyntaxKind.SourceFile:
-        this.currentSourceFile = undefined
-        this.currentDocumentData = undefined
-        break
+    const symbol = this.programContext.typeChecker.getSymbolAtLocation(node)
+    if (!symbol) {
+      return
     }
+
+    const resolverType = getResolverType(
+      this.programContext.typeChecker,
+      symbol,
+      node
+    )
+
+    const symbolData = this.getOrCreateSymbolData(symbol, node, resolverType)
+    if (!symbolData) {
+      return
+    }
+
+    const definitionInfo = tss.createDefinitionInfo(
+      this.currentSourceFile,
+      node
+    )
+    if (symbolData.hasDefinitionInfo(definitionInfo)) {
+      return
+    }
+
+    const tag: ReferenceTag = {
+      type: RangeTagTypes.reference,
+      text: node.getText(),
+    }
+    const reference = this.writerContext.builder.vertex.range(
+      rangeFromNode(this.currentSourceFile, node),
+      tag
+    )
+
+    this.writerContext.emitter.emit(reference)
+    this.currentDocumentData.addRange(reference)
+    symbolData.addReference(
+      this.currentSourceFile,
+      reference,
+      ItemEdgeProperties.references,
+      resolverType
+    )
   }
 
   private getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
@@ -194,33 +198,27 @@ export class Indexer {
     }
 
     const document = this.writerContext.builder.vertex.document(
-      sourceFile.fileName,
-      ''
+      sourceFile.fileName
     )
 
-    let monikerPath: string | undefined
-    let externalLibrary = false
-    if (
-      tss.Program.isSourceFileFromExternalLibrary(
-        this.programContext.program,
-        sourceFile
-      )
-    ) {
-      externalLibrary = true
-      monikerPath = tss.computeMonikerPath(
-        this.pathContext.projectRoot,
-        sourceFile.fileName
-      )
-    } else {
-      monikerPath = this.computeMonikerPath(sourceFile)
-    }
+    const externalLibrary = tss.Program.isSourceFileFromExternalLibrary(
+      this.programContext.program,
+      sourceFile
+    )
+
+    const monikerPath = externalLibrary
+      ? tss.computeMonikerPath(
+          this.pathContext.projectRoot,
+          sourceFile.fileName
+        )
+      : this.computeMonikerPath(sourceFile)
 
     const documentData = new DocumentData(
       this.writerContext.builder,
       this.writerContext.emitter,
       document,
-      monikerPath,
-      externalLibrary
+      externalLibrary,
+      monikerPath
     )
     documentData.begin()
     this.documentDatas.set(sourceFile.fileName, documentData)
@@ -269,7 +267,87 @@ export class Indexer {
       return cachedSymbolData
     }
 
-    // TODO - should check resolve response instead
+    switch (resolverType) {
+      case 'alias':
+      // TODO
+      //  let aliased = this.typeChecker.getAliasedSymbol(symbol)
+      //  if (aliased !== undefined) {
+      //    let aliasedSymbolData = this.resolverContext.getOrCreateSymbolData(
+      //      aliased
+      //    )
+      //    if (aliasedSymbolData !== undefined) {
+      //      return new AliasedSymbolData(
+      //        this.symbolDataContext,
+      //        id,
+      //        aliasedSymbolData,
+      //        scope,
+      //        symbol.getName() !== aliased.getName()
+      //      )
+      //    }
+      //  }
+      //  return new StandardSymbolData(this.symbolDataContext, id)
+
+      case 'method':
+      // TODO
+      // console.log(`MethodResolver#resolve for symbol ${id} | ${symbol.getName()}`);
+      // let container = tss.getSymbolParent(symbol)
+      // if (container === undefined) {
+      //   return new MethodSymbolData(
+      //     this.symbolDataContext,
+      //     id,
+      //     sourceFile,
+      //     undefined,
+      //     scope
+      //   )
+      // }
+      // let baseMembers = this.symbols.findBaseMembers(container, symbol.getName())
+      // if (baseMembers === undefined || baseMembers.length === 0) {
+      //   return new MethodSymbolData(
+      //     this.symbolDataContext,
+      //     id,
+      //     sourceFile,
+      //     undefined,
+      //     scope
+      //   )
+      // }
+      // let baseSymbolData = baseMembers.map((member) =>
+      //   this.resolverContext.getOrCreateSymbolData(member)
+      // )
+      // return new MethodSymbolData(
+      //   this.symbolDataContext,
+      //   id,
+      //   sourceFile,
+      //   baseSymbolData,
+      //   scope
+      // )
+
+      case 'unionOrIntersection':
+      // TODO
+      // const composites = tss.getCompositeSymbols(
+      //   this.typeChecker,
+      //   symbol,
+      //   location
+      // )
+      // if (composites !== undefined) {
+      //   const datas: SymbolData[] = []
+      //   for (let symbol of composites) {
+      //     datas.push(this.resolverContext.getOrCreateSymbolData(symbol))
+      //   }
+      //   return new UnionOrIntersectionSymbolData(
+      //     this.symbolDataContext,
+      //     id,
+      //     sourceFile,
+      //     datas
+      //   )
+      // } else {
+      //   return new StandardSymbolData(this.symbolDataContext, id, undefined)
+      // }
+      // // We have something like x: { prop: number} | { prop: string };
+      // // throw new Error(`Union or intersection resolver requires a location`);
+
+      default:
+    }
+
     const symbolData = new SymbolData(
       this.writerContext.builder,
       this.writerContext.emitter,

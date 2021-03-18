@@ -9,8 +9,8 @@ export class DocumentData {
     private builder: Builder,
     private emitter: Emitter,
     public document: Document,
-    public monikerPath: string | undefined,
-    public externalLibrary: boolean
+    public externalLibrary: boolean,
+    public monikerPath?: string
   ) {}
 
   public begin(): void {
