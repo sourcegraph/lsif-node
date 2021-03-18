@@ -3,27 +3,29 @@ import { Emitter } from '../emitter'
 import { Builder } from '../graph'
 
 export class DocumentData {
-  private ranges: Range[] = []
+    private ranges: Range[] = []
 
-  public constructor(
-    private builder: Builder,
-    private emitter: Emitter,
-    public document: Document,
-    public externalLibrary: boolean,
-    public monikerPath?: string
-  ) {}
+    public constructor(
+        private builder: Builder,
+        private emitter: Emitter,
+        public document: Document,
+        public externalLibrary: boolean,
+        public monikerPath?: string
+    ) {}
 
-  public begin(): void {
-    this.emitter.emit(this.document)
-  }
-
-  public addRange(range: Range): void {
-    this.ranges.push(range)
-  }
-
-  public end(): void {
-    if (this.ranges.length > 0) {
-      this.emitter.emit(this.builder.edge.contains(this.document, this.ranges))
+    public begin(): void {
+        this.emitter.emit(this.document)
     }
-  }
+
+    public addRange(range: Range): void {
+        this.ranges.push(range)
+    }
+
+    public end(): void {
+        if (this.ranges.length > 0) {
+            this.emitter.emit(
+                this.builder.edge.contains(this.document, this.ranges)
+            )
+        }
+    }
 }

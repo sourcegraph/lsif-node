@@ -6,35 +6,27 @@ import PackageJson from '../package'
 import { FileWriter } from '../writer'
 
 export interface WriterContext {
-  builder: Builder
-  emitter: Emitter
-  importLinker: ImportLinker
-  exportLinker?: ExportLinker
+    builder: Builder
+    emitter: Emitter
+    importLinker: ImportLinker
+    exportLinker?: ExportLinker
 }
 
 export const makeWriterContext = (
-  filename: string,
-  projectRoot: string,
-  packageJson?: PackageJson
+    filename: string,
+    projectRoot: string,
+    packageJson?: PackageJson
 ): WriterContext => {
-  let counter = 1
-  const idGenerator = () => counter++
-  const builder = new Builder({
-    idGenerator,
-    emitSource: false,
-  })
+    let counter = 1
+    const idGenerator = () => counter++
+    const emitter = createEmitter(new FileWriter(fs.openSync(filename, 'w')))
 
-  const emitter = createEmitter(new FileWriter(fs.openSync(filename, 'w')))
-
-  const importLinker = new ImportLinker(projectRoot, emitter, idGenerator)
-  const exportLinker =
-    packageJson &&
-    new ExportLinker(projectRoot, packageJson, emitter, idGenerator)
-
-  return {
-    builder,
-    emitter,
-    importLinker,
-    exportLinker,
-  }
+    return {
+        emitter,
+        builder: new Builder({ idGenerator, emitSource: false }),
+        importLinker: new ImportLinker(projectRoot, emitter, idGenerator),
+        exportLinker:
+            packageJson &&
+            new ExportLinker(projectRoot, packageJson, emitter, idGenerator),
+    }
 }

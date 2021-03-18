@@ -6,11 +6,12 @@ import { Vertex, Edge } from 'lsif-protocol'
 import { Writer } from './writer'
 
 export interface Emitter {
-  emit(element: Vertex | Edge): void
+    emit(element: Vertex | Edge): void
 }
 
 export function create(writer: Writer): Emitter {
-  return {
-    emit: (element) => writer.writeln(JSON.stringify(element, undefined, 0)),
-  }
+    return {
+        emit: (element) =>
+            writer.writeln(JSON.stringify(element, undefined, 0)),
+    }
 }
