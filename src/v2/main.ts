@@ -1,7 +1,7 @@
 import * as path from 'path'
 import ts from 'typescript-lsif'
 import { Indexer, version } from './indexer'
-import { makeWriterContext } from './writer'
+import { Emitter } from './writer'
 import { makePathContext } from './paths'
 import { loadPackageJson, loadProjectConfiguration } from './config'
 import { makeProgramContext } from './program'
@@ -100,7 +100,7 @@ async function processProject(
         )
     }
 
-    const writerContext = makeWriterContext(out, projectRoot, packageJson)
+    const emitter = new Emitter(out, projectRoot, packageJson)
     const programContext = makeProgramContext(config, currentDirectory)
     const pathContext = makePathContext(
         programContext.program,
@@ -127,11 +127,6 @@ async function processProject(
     // TODO - share indexer
     // TODO - need to reload after fetching dependent projects for some reason?
 
-    const indexer = new Indexer(writerContext, programContext, pathContext)
+    const indexer = new Indexer(emitter, programContext, pathContext)
     indexer.index() // TODO - return type?
 }
-
-main().catch((error) => {
-    console.error(error)
-    process.exitCode = 1
-})

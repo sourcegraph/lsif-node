@@ -11,8 +11,7 @@ import {
     VertexLabels,
 } from 'lsif-protocol'
 import ts from 'typescript-lsif'
-import { Emitter } from '../emitter'
-import { Builder } from '../graph'
+import { Emitter } from './writer'
 import * as tss from '../typescripts'
 
 type ReferenceRangesProperties =
@@ -28,11 +27,10 @@ export class SymbolData {
     private definitionInfo: tss.DefinitionInfo[] = []
 
     public constructor(
-        protected builder: Builder,
         protected emitter: Emitter,
         protected document: Document
     ) {
-        this.resultSet = this.builder.vertex.resultSet()
+        this.resultSet = this.emitter.vertex.resultSet()
     }
 
     public getResultSet(): ResultSet {
@@ -80,7 +78,7 @@ export class SymbolData {
         definition: DefinitionRange,
         recordAsReference = true
     ): void {
-        this.emitter.emit(this.builder.edge.next(definition, this.resultSet))
+        this.emitter.emit(this.emitter.edge.next(definition, this.resultSet))
         this.definitionRanges.push(definition)
         if (recordAsReference) {
             this.addReference(
@@ -110,7 +108,7 @@ export class SymbolData {
             case VertexLabels.range:
                 if (property) {
                     this.emitter.emit(
-                        this.builder.edge.next(reference, this.resultSet)
+                        this.emitter.edge.next(reference, this.resultSet)
                     )
                     this.referenceRanges.set(
                         property,
@@ -128,13 +126,13 @@ export class SymbolData {
     }
 
     public addHover(hover: lsp.Hover): void {
-        const hoverResult = this.builder.vertex.hoverResult(hover)
+        const hoverResult = this.emitter.vertex.hoverResult(hover)
         this.emitter.emit(hoverResult)
-        this.emitter.emit(this.builder.edge.hover(this.resultSet, hoverResult))
+        this.emitter.emit(this.emitter.edge.hover(this.resultSet, hoverResult))
     }
 
     public addMoniker(moniker: Moniker): void {
-        this.emitter.emit(this.builder.edge.moniker(this.resultSet, moniker))
+        this.emitter.emit(this.emitter.edge.moniker(this.resultSet, moniker))
     }
 
     public end(): void {
@@ -142,7 +140,7 @@ export class SymbolData {
             const definitionResult = this.getOrCreateDefinitionResult()
 
             this.emitter.emit(
-                this.builder.edge.item(
+                this.emitter.edge.item(
                     definitionResult,
                     this.definitionRanges,
                     this.document
@@ -155,7 +153,7 @@ export class SymbolData {
 
             for (const [property, values] of this.referenceRanges.entries()) {
                 this.emitter.emit(
-                    this.builder.edge.item(
+                    this.emitter.edge.item(
                         referenceResult,
                         values,
                         this.document,
@@ -169,7 +167,7 @@ export class SymbolData {
             const referenceResult = this.getOrCreateReferenceResult()
 
             this.emitter.emit(
-                this.builder.edge.item(
+                this.emitter.edge.item(
                     referenceResult,
                     this.referenceResults,
                     this.document
@@ -179,19 +177,19 @@ export class SymbolData {
     }
 
     public getOrCreateDefinitionResult(): DefinitionResult {
-        const definitionResult = this.builder.vertex.definitionResult()
+        const definitionResult = this.emitter.vertex.definitionResult()
         this.emitter.emit(definitionResult)
         this.emitter.emit(
-            this.builder.edge.definition(this.resultSet, definitionResult)
+            this.emitter.edge.definition(this.resultSet, definitionResult)
         )
         return definitionResult
     }
 
     public getOrCreateReferenceResult(): ReferenceResult {
-        const referenceResult = this.builder.vertex.referencesResult()
+        const referenceResult = this.emitter.vertex.referencesResult()
         this.emitter.emit(referenceResult)
         this.emitter.emit(
-            this.builder.edge.references(this.resultSet, referenceResult)
+            this.emitter.edge.references(this.resultSet, referenceResult)
         )
         return referenceResult
     }
@@ -199,20 +197,19 @@ export class SymbolData {
 
 export class AliasSymbolData extends SymbolData {
     constructor(
-        builder: Builder,
         emitter: Emitter,
         document: Document,
         private aliased: SymbolData,
         private rename: boolean
     ) {
-        super(builder, emitter, document)
+        super(emitter, document)
     }
 
     public begin(): void {
         super.begin()
 
         this.emitter.emit(
-            this.builder.edge.next(
+            this.emitter.edge.next(
                 this.getResultSet(),
                 this.aliased.getResultSet()
             )
@@ -228,7 +225,7 @@ export class AliasSymbolData extends SymbolData {
             super.addDefinition(sourceFile, definition, false)
         } else {
             this.emitter.emit(
-                this.builder.edge.next(definition, this.getResultSet())
+                this.emitter.edge.next(definition, this.getResultSet())
             )
             super.addReference(
                 sourceFile,
@@ -245,7 +242,7 @@ export class AliasSymbolData extends SymbolData {
     ): void {
         if (reference.label === VertexLabels.range) {
             this.emitter.emit(
-                this.builder.edge.next(reference, this.getResultSet())
+                this.emitter.edge.next(reference, this.getResultSet())
             )
         }
         this.aliased.addReference(sourceFile, reference, property)
@@ -254,13 +251,12 @@ export class AliasSymbolData extends SymbolData {
 
 export class MethodSymbolData extends SymbolData {
     constructor(
-        builder: Builder,
         emitter: Emitter,
         document: Document,
         private bases: SymbolData[],
         private sourceFile: ts.SourceFile
     ) {
-        super(builder, emitter, document)
+        super(emitter, document)
     }
 
     public begin(): void {
@@ -304,7 +300,7 @@ export class MethodSymbolData extends SymbolData {
 
         if (reference.label === 'range') {
             this.emitter.emit(
-                this.builder.edge.next(reference, this.getResultSet())
+                this.emitter.edge.next(reference, this.getResultSet())
             )
         }
         for (const base of this.bases) {
@@ -337,13 +333,12 @@ export class TransientSymbolData extends SymbolData {
 
 export class UnionOrIntersectionSymbolData extends SymbolData {
     constructor(
-        builder: Builder,
         emitter: Emitter,
         document: Document,
         private elements: SymbolData[],
         private sourceFile: ts.SourceFile
     ) {
-        super(builder, emitter, document)
+        super(emitter, document)
     }
 
     public begin(): void {

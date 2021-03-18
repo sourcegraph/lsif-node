@@ -21,7 +21,7 @@ import {
     TransientSymbolData,
     UnionOrIntersectionSymbolData,
 } from './symbol'
-import { WriterContext } from './writer'
+import { Emitter } from './writer'
 
 export const version = '0.0.1'
 
@@ -44,7 +44,7 @@ export class Indexer {
     private symbols: Symbols
 
     public constructor(
-        private writerContext: WriterContext,
+        private emitter: Emitter,
         private programContext: ProgramContext,
         private pathContext: PathContext
     ) {
@@ -55,15 +55,15 @@ export class Indexer {
     }
 
     public index(): void {
-        const metadata = this.writerContext.builder.vertex.metaData(
+        const metadata = this.emitter.vertex.metaData(
             version,
             URI.file(this.pathContext.repositoryRoot).toString(true),
             { name: 'lsif-tsc', args: ts.sys.args, version }
         )
-        this.writerContext.emitter.emit(metadata)
+        this.emitter.emit(metadata)
 
-        const project = this.writerContext.builder.vertex.project()
-        this.writerContext.emitter.emit(project)
+        const project = this.emitter.vertex.project()
+        this.emitter.emit(project)
 
         for (const sourceFile of this.programContext.program.getSourceFiles()) {
             if (
@@ -90,8 +90,8 @@ export class Indexer {
             documentData?.end()
         }
 
-        this.writerContext.emitter.emit(
-            this.writerContext.builder.edge.contains(
+        this.emitter.emit(
+            this.emitter.edge.contains(
                 project,
                 Array.from(this.documentDatas.values()).map(
                     (documentData) => documentData!.document
@@ -260,12 +260,12 @@ export class Indexer {
             type: RangeTagTypes.reference,
             text: node.getText(),
         }
-        const reference = this.writerContext.builder.vertex.range(
+        const reference = this.emitter.vertex.range(
             rangeFromNode(this.currentSourceFile, node),
             tag
         )
 
-        this.writerContext.emitter.emit(reference)
+        this.emitter.emit(reference)
         this.currentDocumentData.addRange(reference)
         symbolData.addReference(
             this.currentSourceFile,
@@ -326,9 +326,7 @@ export class Indexer {
             return cachedDocumentData
         }
 
-        const document = this.writerContext.builder.vertex.document(
-            sourceFile.fileName
-        )
+        const document = this.emitter.vertex.document(sourceFile.fileName)
 
         const externalLibrary = tss.Program.isSourceFileFromExternalLibrary(
             this.programContext.program,
@@ -343,8 +341,7 @@ export class Indexer {
             : this.computeMonikerPath(sourceFile)
 
         const documentData = new DocumentData(
-            this.writerContext.builder,
-            this.writerContext.emitter,
+            this.emitter,
             document,
             externalLibrary,
             monikerPath
@@ -442,12 +439,8 @@ export class Indexer {
         const moniker =
             monikerIdentifier &&
             (externalLibrary
-                ? this.writerContext?.importLinker.handleMoniker2(
-                      monikerIdentifier
-                  )
-                : this.writerContext?.exportLinker?.handleMoniker2(
-                      monikerIdentifier
-                  ))
+                ? this.emitter?.handleImportMoniker(monikerIdentifier)
+                : this.emitter?.handleExportMoniker(monikerIdentifier))
         if (moniker) {
             symbolData.addMoniker(moniker)
         }
@@ -488,8 +481,7 @@ export class Indexer {
                 )
                 if (composites) {
                     return new UnionOrIntersectionSymbolData(
-                        this.writerContext.builder,
-                        this.writerContext.emitter,
+                        this.emitter,
                         document,
                         composites.map((symbol) =>
                             this.getOrCreateSymbolData(symbol)
@@ -502,11 +494,7 @@ export class Indexer {
             // Problem: Symbols that come from the lib*.d.ts files are marked transient
             // as well. Check if the symbol has some other meaningful flags
             if ((symbol.getFlags() & ~ts.SymbolFlags.Transient) === 0) {
-                return new TransientSymbolData(
-                    this.writerContext.builder,
-                    this.writerContext.emitter,
-                    document
-                )
+                return new TransientSymbolData(this.emitter, document)
             }
         }
 
@@ -521,8 +509,7 @@ export class Indexer {
             const aliasedSymbolData = this.getOrCreateSymbolData(aliased)
             if (aliasedSymbolData) {
                 return new AliasSymbolData(
-                    this.writerContext.builder,
-                    this.writerContext.emitter,
+                    this.emitter,
                     document,
                     aliasedSymbolData,
                     symbol.getName() !== aliased.getName()
@@ -542,19 +529,14 @@ export class Indexer {
             ).map((member) => this.getOrCreateSymbolData(member))
 
             return new MethodSymbolData(
-                this.writerContext.builder,
-                this.writerContext.emitter,
+                this.emitter,
                 document,
                 baseSymbols,
                 sourceFile
             )
         }
 
-        return new SymbolData(
-            this.writerContext.builder,
-            this.writerContext.emitter,
-            document
-        )
+        return new SymbolData(this.emitter, document)
     }
 
     private emitDefinition(
@@ -575,8 +557,8 @@ export class Indexer {
                 symbolKindMap.get(declaration.kind) || lsp.SymbolKind.Property,
             fullRange: rangeFromNode(sourceFile, declaration),
         }
-        const definition = this.writerContext.builder.vertex.range(range, tag)
-        this.writerContext.emitter.emit(definition)
+        const definition = this.emitter.vertex.range(range, tag)
+        this.emitter.emit(definition)
         documentData.addRange(definition)
         symbolData.addDefinition(sourceFile, definition)
         symbolData.addDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))

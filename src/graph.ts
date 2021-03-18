@@ -64,26 +64,8 @@ import {
 } from 'lsif-protocol'
 import { makeAbsolute } from './typescripts'
 
-export interface BuilderOptions {
-    idGenerator?: () => Id
-    emitSource?: boolean
-}
-
-export interface ResolvedBuilderOptions {
-    idGenerator: () => Id
-    emitSource: boolean
-}
-
 export class VertexBuilder {
-    constructor(private options: ResolvedBuilderOptions) {}
-
-    private nextId(): Id {
-        return this.options.idGenerator()
-    }
-
-    private get emitSource(): boolean {
-        return this.options.emitSource
-    }
+    constructor(private nextId: () => Id) {}
 
     public metaData(
         version: string,
@@ -129,9 +111,6 @@ export class VertexBuilder {
             label: VertexLabels.project,
             kind: 'typescript',
         }
-        if (contents) {
-            result.contents = this.encodeString(contents)
-        }
         return result
     }
 
@@ -142,9 +121,6 @@ export class VertexBuilder {
             label: VertexLabels.document,
             uri: URI.file(makeAbsolute(path)).toString(true),
             languageId: 'typescript',
-        }
-        if (contents) {
-            result.contents = this.encodeString(contents)
         }
         return result
     }
@@ -317,24 +293,10 @@ export class VertexBuilder {
             label: VertexLabels.implementationResult,
         }
     }
-
-    private encodeString(contents: string): string | undefined {
-        return this.emitSource
-            ? Buffer.from(contents).toString('base64')
-            : undefined
-    }
 }
 
 export class EdgeBuilder {
-    private _options: ResolvedBuilderOptions
-
-    constructor(options: ResolvedBuilderOptions) {
-        this._options = options
-    }
-
-    private nextId(): Id {
-        return this._options.idGenerator()
-    }
+    constructor(private nextId: () => Id) {}
 
     public raw(
         kind: EdgeLabels,
@@ -605,23 +567,5 @@ export class EdgeBuilder {
                 throw new Error("Shouldn't happen")
         }
         return result
-    }
-}
-
-export class Builder {
-    private _vertex: VertexBuilder
-    private _edge: EdgeBuilder
-
-    constructor(options: ResolvedBuilderOptions) {
-        this._vertex = new VertexBuilder(options)
-        this._edge = new EdgeBuilder(options)
-    }
-
-    public get vertex(): VertexBuilder {
-        return this._vertex
-    }
-
-    public get edge(): EdgeBuilder {
-        return this._edge
     }
 }
