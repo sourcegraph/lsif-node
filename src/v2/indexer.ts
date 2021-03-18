@@ -11,8 +11,7 @@ import { Symbols } from '../lsif'
 import * as tss from '../typescripts'
 import { DocumentData } from './document'
 import { getHover } from './hover'
-import { ResolverType, getResolverType } from './resolution'
-import { SymbolData } from './symbol'
+import { makeSymbolData, SymbolData } from './symbol'
 import { rangeFromNode, phantomRange } from './ranges'
 import { WriterContext } from './writer'
 import { ProgramContext } from './program'
@@ -153,13 +152,7 @@ export class Indexer {
       return
     }
 
-    const resolverType = getResolverType(
-      this.programContext.typeChecker,
-      symbol,
-      node
-    )
-
-    const symbolData = this.getOrCreateSymbolData(symbol, node, resolverType)
+    const symbolData = this.getOrCreateSymbolData(symbol, node)
     if (!symbolData) {
       return
     }
@@ -186,8 +179,7 @@ export class Indexer {
     symbolData.addReference(
       this.currentSourceFile,
       reference,
-      ItemEdgeProperties.references,
-      resolverType
+      ItemEdgeProperties.references
     )
   }
 
@@ -252,11 +244,7 @@ export class Indexer {
     return undefined
   }
 
-  private getOrCreateSymbolData(
-    symbol: ts.Symbol,
-    node: ts.Node,
-    resolverType: ResolverType
-  ): SymbolData {
+  private getOrCreateSymbolData(symbol: ts.Symbol, node: ts.Node): SymbolData {
     if (!this.currentDocumentData) {
       throw new Error('illegal symbol context')
     }
@@ -267,88 +255,10 @@ export class Indexer {
       return cachedSymbolData
     }
 
-    switch (resolverType) {
-      case 'alias':
-      // TODO
-      //  let aliased = this.typeChecker.getAliasedSymbol(symbol)
-      //  if (aliased !== undefined) {
-      //    let aliasedSymbolData = this.resolverContext.getOrCreateSymbolData(
-      //      aliased
-      //    )
-      //    if (aliasedSymbolData !== undefined) {
-      //      return new AliasedSymbolData(
-      //        this.symbolDataContext,
-      //        id,
-      //        aliasedSymbolData,
-      //        scope,
-      //        symbol.getName() !== aliased.getName()
-      //      )
-      //    }
-      //  }
-      //  return new StandardSymbolData(this.symbolDataContext, id)
-
-      case 'method':
-      // TODO
-      // console.log(`MethodResolver#resolve for symbol ${id} | ${symbol.getName()}`);
-      // let container = tss.getSymbolParent(symbol)
-      // if (container === undefined) {
-      //   return new MethodSymbolData(
-      //     this.symbolDataContext,
-      //     id,
-      //     sourceFile,
-      //     undefined,
-      //     scope
-      //   )
-      // }
-      // let baseMembers = this.symbols.findBaseMembers(container, symbol.getName())
-      // if (baseMembers === undefined || baseMembers.length === 0) {
-      //   return new MethodSymbolData(
-      //     this.symbolDataContext,
-      //     id,
-      //     sourceFile,
-      //     undefined,
-      //     scope
-      //   )
-      // }
-      // let baseSymbolData = baseMembers.map((member) =>
-      //   this.resolverContext.getOrCreateSymbolData(member)
-      // )
-      // return new MethodSymbolData(
-      //   this.symbolDataContext,
-      //   id,
-      //   sourceFile,
-      //   baseSymbolData,
-      //   scope
-      // )
-
-      case 'unionOrIntersection':
-      // TODO
-      // const composites = tss.getCompositeSymbols(
-      //   this.typeChecker,
-      //   symbol,
-      //   location
-      // )
-      // if (composites !== undefined) {
-      //   const datas: SymbolData[] = []
-      //   for (let symbol of composites) {
-      //     datas.push(this.resolverContext.getOrCreateSymbolData(symbol))
-      //   }
-      //   return new UnionOrIntersectionSymbolData(
-      //     this.symbolDataContext,
-      //     id,
-      //     sourceFile,
-      //     datas
-      //   )
-      // } else {
-      //   return new StandardSymbolData(this.symbolDataContext, id, undefined)
-      // }
-      // // We have something like x: { prop: number} | { prop: string };
-      // // throw new Error(`Union or intersection resolver requires a location`);
-
-      default:
-    }
-
-    const symbolData = new SymbolData(
+    const symbolData = makeSymbolData(
+      this.programContext.typeChecker,
+      symbol,
+      node,
       this.writerContext.builder,
       this.writerContext.emitter,
       this.currentDocumentData.document
@@ -358,7 +268,7 @@ export class Indexer {
     //
     //
 
-    const sourceFiles = this.getSourceFiles(symbol, node, resolverType)
+    const sourceFiles = symbolData.getSourceFiles(symbol, node)
     const locationKind = this.symbols.getLocationKind(sourceFiles)
     const exportPath: string | undefined = this.symbols.getExportPath(
       symbol,
@@ -398,12 +308,8 @@ export class Indexer {
       symbolData.addMoniker(moniker)
     }
 
-    for (const declaration of this.getDeclarations(
-      symbol,
-      node,
-      resolverType
-    )) {
-      const textAndNode = this.getText(symbol, declaration, resolverType)
+    for (const declaration of symbolData.getDeclarations(symbol, node)) {
+      const textAndNode = symbolData.getText(symbol, declaration)
       if (!textAndNode) {
         continue
       }
@@ -412,8 +318,7 @@ export class Indexer {
         declaration,
         symbolData,
         textAndNode.text,
-        textAndNode.node,
-        resolverType
+        textAndNode.node
       )
     }
 
@@ -421,69 +326,11 @@ export class Indexer {
     return symbolData
   }
 
-  private getDeclarations(
-    symbol: ts.Symbol,
-    node: ts.Node,
-    resolverType: ResolverType
-  ): ts.Node[] {
-    switch (resolverType) {
-      case 'transient':
-      case 'unionOrIntersection':
-        return [node]
-
-      default:
-        return symbol.getDeclarations() || []
-    }
-  }
-
-  private getSourceFiles(
-    symbol: ts.Symbol,
-    node: ts.Node,
-    resolverType: ResolverType
-  ): ts.SourceFile[] {
-    switch (resolverType) {
-      case 'transient':
-      case 'unionOrIntersection':
-        return [node.getSourceFile()]
-
-      default:
-        return Array.from(
-          tss.getUniqueSourceFiles(symbol.getDeclarations()).values()
-        )
-    }
-  }
-
-  private getText(
-    symbol: ts.Symbol,
-    node: ts.Node,
-    resolverType: ResolverType
-  ): { text: string; node: ts.Node } | undefined {
-    switch (resolverType) {
-      case 'unionOrIntersection':
-        return { text: node.getText(), node }
-
-      default:
-        if (tss.isNamedDeclaration(node)) {
-          return {
-            text: node.name.getText(),
-            node: node.name,
-          }
-        }
-
-        if (tss.isValueModule(symbol) && ts.isSourceFile(node)) {
-          return { text: '', node }
-        }
-
-        return undefined
-    }
-  }
-
   private emitDefinition(
     declaration: ts.Node,
     symbolData: SymbolData,
     text: string,
-    node: ts.Node,
-    resolverType: ResolverType
+    node: ts.Node
   ): void {
     const sourceFile = declaration.getSourceFile()
     const documentData = this.getOrCreateDocumentData(sourceFile)
@@ -499,11 +346,8 @@ export class Indexer {
     const definition = this.writerContext.builder.vertex.range(range, tag)
     this.writerContext.emitter.emit(definition)
     documentData.addRange(definition)
-    symbolData.addDefinition(sourceFile, definition, resolverType)
-    symbolData.recordDefinitionInfo(
-      tss.createDefinitionInfo(sourceFile, node),
-      resolverType
-    )
+    symbolData.addDefinition(sourceFile, definition)
+    symbolData.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))
     if (tss.isNamedDeclaration(declaration)) {
       const hover = getHover(
         this.programContext.languageService,
