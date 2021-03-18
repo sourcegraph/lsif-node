@@ -11,13 +11,19 @@ import { Symbols } from '../lsif'
 import * as tss from '../typescripts'
 import { DocumentData } from './document'
 import { getHover } from './hover'
-import { makeSymbolData, SymbolData } from './symbol'
-import { rangeFromNode, phantomRange } from './ranges'
-import { WriterContext } from './writer'
-import { ProgramContext } from './program'
 import { PathContext } from './paths'
+import { ProgramContext } from './program'
+import { phantomRange, rangeFromNode } from './ranges'
+import {
+  AliasSymbolData,
+  MethodSymbolData,
+  SymbolData,
+  TransientSymbolData,
+  UnionOrIntersectionSymbolData,
+} from './symbol'
+import { WriterContext } from './writer'
 
-const version = '0.0.1'
+export const version = '0.0.1'
 
 const symbolKindMap: Map<number, lsp.SymbolKind> = new Map<
   number,
@@ -110,11 +116,11 @@ export class Indexer {
         )
         return true
 
-      // TODO - need to do export things?
+      // TODO - exports
       // case ts.SyntaxKind.ModuleDeclaration:
       //   break
 
-      // TODO - visit declaration (for document symbols only)
+      // TODO - document symbols
       // case ts.SyntaxKind.ClassDeclaration:
       // case ts.SyntaxKind.InterfaceDeclaration:
       // case ts.SyntaxKind.TypeParameter:
@@ -233,7 +239,7 @@ export class Indexer {
         )
       )
     }
-    // TODO
+    // TODO - project references
     // This can come from a dependent project.
     // let fileName = sourceFile.fileName
     // for (let outDir of this.dependentOutDirs) {
@@ -244,9 +250,9 @@ export class Indexer {
     return undefined
   }
 
-  private getOrCreateSymbolData(symbol: ts.Symbol, node: ts.Node): SymbolData {
+  private getOrCreateSymbolData(symbol: ts.Symbol, node?: ts.Node): SymbolData {
     if (!this.currentDocumentData) {
-      throw new Error('illegal symbol context')
+      throw new Error('Illegal symbol context')
     }
 
     const id = tss.createSymbolKey(this.programContext.typeChecker, symbol)
@@ -255,14 +261,7 @@ export class Indexer {
       return cachedSymbolData
     }
 
-    const symbolData = makeSymbolData(
-      this.programContext.typeChecker,
-      symbol,
-      node,
-      this.writerContext.builder,
-      this.writerContext.emitter,
-      this.currentDocumentData.document
-    )
+    const symbolData = this.makeSymbolData(symbol, node)
     symbolData.begin()
 
     //
@@ -326,6 +325,86 @@ export class Indexer {
     return symbolData
   }
 
+  private makeSymbolData(symbol: ts.Symbol, node?: ts.Node): SymbolData {
+    if (!this.currentDocumentData || !this.currentSourceFile) {
+      throw new Error('Illegal symbol context')
+    }
+    const document = this.currentDocumentData.document
+    const sourceFile = this.currentSourceFile
+
+    if (tss.isTransient(symbol)) {
+      if (tss.isComposite(this.programContext.typeChecker, symbol, node)) {
+        const composites = tss.getCompositeSymbols(
+          this.programContext.typeChecker,
+          symbol,
+          node
+        )
+        if (composites) {
+          return new UnionOrIntersectionSymbolData(
+            this.writerContext.builder,
+            this.writerContext.emitter,
+            document,
+            composites.map((symbol) => this.getOrCreateSymbolData(symbol)),
+            sourceFile
+          )
+        }
+      }
+
+      // Problem: Symbols that come from the lib*.d.ts files are marked transient
+      // as well. Check if the symbol has some other meaningful flags
+      if ((symbol.getFlags() & ~ts.SymbolFlags.Transient) === 0) {
+        return new TransientSymbolData(
+          this.writerContext.builder,
+          this.writerContext.emitter,
+          document
+        )
+      }
+    }
+
+    if (tss.isTypeAlias(symbol)) {
+      // TODO - forward symbol information
+    }
+
+    if (tss.isAliasSymbol(symbol)) {
+      const aliased = this.programContext.typeChecker.getAliasedSymbol(symbol)
+      if (aliased !== undefined) {
+        const aliasedSymbolData = this.getOrCreateSymbolData(aliased)
+        if (aliasedSymbolData) {
+          return new AliasSymbolData(
+            this.writerContext.builder,
+            this.writerContext.emitter,
+            document,
+            aliasedSymbolData,
+            symbol.getName() !== aliased.getName()
+          )
+        }
+      }
+    }
+
+    if (tss.isMethodSymbol(symbol)) {
+      const container = tss.getSymbolParent(symbol)
+      const baseSymbols = (
+        (container &&
+          this.symbols.findBaseMembers(container, symbol.getName())) ||
+        []
+      ).map((member) => this.getOrCreateSymbolData(member))
+
+      return new MethodSymbolData(
+        this.writerContext.builder,
+        this.writerContext.emitter,
+        document,
+        baseSymbols,
+        sourceFile
+      )
+    }
+
+    return new SymbolData(
+      this.writerContext.builder,
+      this.writerContext.emitter,
+      document
+    )
+  }
+
   private emitDefinition(
     declaration: ts.Node,
     symbolData: SymbolData,
@@ -347,7 +426,7 @@ export class Indexer {
     this.writerContext.emitter.emit(definition)
     documentData.addRange(definition)
     symbolData.addDefinition(sourceFile, definition)
-    symbolData.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))
+    symbolData.addDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))
     if (tss.isNamedDeclaration(declaration)) {
       const hover = getHover(
         this.programContext.languageService,

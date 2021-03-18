@@ -12,7 +12,8 @@ export interface PathContext {
 export const makePathContext = (
   program: ts.Program,
   projectRoot: string,
-  currentDirectory: string
+  currentDirectory: string,
+  repositoryRoot?: string
 ): PathContext => {
   const compilerOptions = program.getCompilerOptions()
 
@@ -32,8 +33,10 @@ export const makePathContext = (
     projectRoot,
     rootDir,
     outDir,
-    repositoryRoot: tss.makeAbsolute(
-      execSync('git rev-parse --show-toplevel').toString().trim()
-    ),
+    repositoryRoot:
+      repositoryRoot ||
+      tss.makeAbsolute(
+        execSync('git rev-parse --show-toplevel').toString().trim()
+      ),
   }
 }

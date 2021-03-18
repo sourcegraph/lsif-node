@@ -13,6 +13,7 @@ export interface WriterContext {
 }
 
 export const makeWriterContext = (
+  filename: string,
   projectRoot: string,
   packageJson?: PackageJson
 ): WriterContext => {
@@ -23,7 +24,7 @@ export const makeWriterContext = (
     emitSource: false,
   })
 
-  const emitter = createEmitter(new FileWriter(fs.openSync('dump.lsif', 'w')))
+  const emitter = createEmitter(new FileWriter(fs.openSync(filename, 'w')))
 
   const importLinker = new ImportLinker(projectRoot, emitter, idGenerator)
   const exportLinker =
