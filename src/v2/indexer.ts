@@ -7,9 +7,6 @@ import {
 } from 'lsif-protocol'
 import ts from 'typescript-lsif'
 import { URI } from 'vscode-uri'
-import { Emitter } from '../emitter'
-import { Builder } from '../graph'
-import { ExportLinker, ImportLinker } from '../linker'
 import { Symbols } from '../lsif'
 import * as tss from '../typescripts'
 import { DocumentData } from './document'
@@ -17,6 +14,9 @@ import { getHover } from './hover'
 import { ResolverType, getResolverType } from './resolution'
 import { SymbolData } from './symbol'
 import { rangeFromNode, phantomRange } from './ranges'
+import { WriterContext } from './writer'
+import { ProgramContext } from './program'
+import { PathContext } from './paths'
 
 const version = '0.0.1'
 
@@ -39,33 +39,28 @@ export class Indexer {
   private symbols: Symbols
 
   public constructor(
-    private builder: Builder,
-    private emitter: Emitter,
-    private program: ts.Program,
-    private typeChecker: ts.TypeChecker,
-    private importLinker: ImportLinker,
-    private exportLinker: ExportLinker | undefined,
-    private languageService: ts.LanguageService,
-    private projectRoot: string,
-    private rootDir: string,
-    private outDir: string,
-    private repositoryRoot: string
+    private writerContext: WriterContext,
+    private programContext: ProgramContext,
+    private pathContext: PathContext
   ) {
-    this.symbols = new Symbols(this.program, this.typeChecker)
+    this.symbols = new Symbols(
+      this.programContext.program,
+      this.programContext.typeChecker
+    )
   }
 
   public index(): void {
-    const metadata = this.builder.vertex.metaData(
+    const metadata = this.writerContext.builder.vertex.metaData(
       version,
-      URI.file(this.repositoryRoot).toString(true),
+      URI.file(this.pathContext.repositoryRoot).toString(true),
       { name: 'lsif-tsc', args: ts.sys.args, version }
     )
-    this.emitter.emit(metadata)
+    this.writerContext.emitter.emit(metadata)
 
-    const project = this.builder.vertex.project()
-    this.emitter.emit(project)
+    const project = this.writerContext.builder.vertex.project()
+    this.writerContext.emitter.emit(project)
 
-    for (const sourceFile of this.program.getSourceFiles()) {
+    for (const sourceFile of this.programContext.program.getSourceFiles()) {
       if (this.isFullContentIgnored(sourceFile)) {
         continue
       }
@@ -81,8 +76,8 @@ export class Indexer {
       documentData?.end()
     }
 
-    this.emitter.emit(
-      this.builder.edge.contains(
+    this.writerContext.emitter.emit(
+      this.writerContext.builder.edge.contains(
         project,
         Array.from(this.documentDatas.values()).map(
           (documentData) => documentData!.document
@@ -93,8 +88,14 @@ export class Indexer {
 
   private isFullContentIgnored(sourceFile: ts.SourceFile): boolean {
     return (
-      tss.Program.isSourceFileDefaultLibrary(this.program, sourceFile) ||
-      tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)
+      tss.Program.isSourceFileDefaultLibrary(
+        this.programContext.program,
+        sourceFile
+      ) ||
+      tss.Program.isSourceFileFromExternalLibrary(
+        this.programContext.program,
+        sourceFile
+      )
     )
   }
 
@@ -128,12 +129,16 @@ export class Indexer {
           return
         }
 
-        const symbol = this.typeChecker.getSymbolAtLocation(node)
+        const symbol = this.programContext.typeChecker.getSymbolAtLocation(node)
         if (!symbol) {
           return
         }
 
-        const resolverType = getResolverType(this.typeChecker, symbol, node)
+        const resolverType = getResolverType(
+          this.programContext.typeChecker,
+          symbol,
+          node
+        )
 
         const symbolData = this.getOrCreateSymbolData(
           symbol,
@@ -156,12 +161,12 @@ export class Indexer {
           type: RangeTagTypes.reference,
           text: node.getText(),
         }
-        const reference = this.builder.vertex.range(
+        const reference = this.writerContext.builder.vertex.range(
           rangeFromNode(this.currentSourceFile, node),
           tag
         )
 
-        this.emitter.emit(reference)
+        this.writerContext.emitter.emit(reference)
         this.currentDocumentData.addRange(reference)
         symbolData.addReference(
           this.currentSourceFile,
@@ -188,14 +193,22 @@ export class Indexer {
       return cachedDocumentData
     }
 
-    const document = this.builder.vertex.document(sourceFile.fileName, '')
+    const document = this.writerContext.builder.vertex.document(
+      sourceFile.fileName,
+      ''
+    )
 
     let monikerPath: string | undefined
     let externalLibrary = false
-    if (tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)) {
+    if (
+      tss.Program.isSourceFileFromExternalLibrary(
+        this.programContext.program,
+        sourceFile
+      )
+    ) {
       externalLibrary = true
       monikerPath = tss.computeMonikerPath(
-        this.projectRoot,
+        this.pathContext.projectRoot,
         sourceFile.fileName
       )
     } else {
@@ -203,8 +216,8 @@ export class Indexer {
     }
 
     const documentData = new DocumentData(
-      this.builder,
-      this.emitter,
+      this.writerContext.builder,
+      this.writerContext.emitter,
       document,
       monikerPath,
       externalLibrary
@@ -218,12 +231,16 @@ export class Indexer {
     // A real source file inside this project.
     if (
       !sourceFile.isDeclarationFile ||
-      (sourceFile.fileName.startsWith(this.rootDir) &&
-        sourceFile.fileName.charAt(this.rootDir.length) === '/')
+      (sourceFile.fileName.startsWith(this.pathContext.rootDir) &&
+        sourceFile.fileName.charAt(this.pathContext.rootDir.length) === '/')
     ) {
       return tss.computeMonikerPath(
-        this.projectRoot,
-        tss.toOutLocation(sourceFile.fileName, this.rootDir, this.outDir)
+        this.pathContext.projectRoot,
+        tss.toOutLocation(
+          sourceFile.fileName,
+          this.pathContext.rootDir,
+          this.pathContext.outDir
+        )
       )
     }
     // TODO
@@ -246,15 +263,16 @@ export class Indexer {
       throw new Error('illegal symbol context')
     }
 
-    const id = tss.createSymbolKey(this.typeChecker, symbol)
+    const id = tss.createSymbolKey(this.programContext.typeChecker, symbol)
     const cachedSymbolData = this.symbolDatas.get(id)
     if (cachedSymbolData) {
       return cachedSymbolData
     }
 
+    // TODO - should check resolve response instead
     const symbolData = new SymbolData(
-      this.builder,
-      this.emitter,
+      this.writerContext.builder,
+      this.writerContext.emitter,
       this.currentDocumentData.document
     )
     symbolData.begin()
@@ -293,18 +311,13 @@ export class Indexer {
       monikerIdentifier = tss.createMonikerIdentifier(monikerPath, exportPath)
     }
 
-    if (monikerIdentifier) {
-      if (externalLibrary) {
-        const moniker = this.importLinker.handleMoniker2(monikerIdentifier)
-        if (moniker) {
-          symbolData.addMoniker(moniker)
-        }
-      } else if (this.exportLinker !== undefined) {
-        const moniker = this.exportLinker.handleMoniker2(monikerIdentifier)
-        if (moniker) {
-          symbolData.addMoniker(moniker)
-        }
-      }
+    const moniker =
+      monikerIdentifier &&
+      (externalLibrary
+        ? this.writerContext?.importLinker.handleMoniker2(monikerIdentifier)
+        : this.writerContext?.exportLinker?.handleMoniker2(monikerIdentifier))
+    if (moniker) {
+      symbolData.addMoniker(moniker)
     }
 
     for (const declaration of this.getDeclarations(
@@ -405,8 +418,8 @@ export class Indexer {
       kind: symbolKindMap.get(declaration.kind) || lsp.SymbolKind.Property,
       fullRange: rangeFromNode(sourceFile, declaration),
     }
-    const definition = this.builder.vertex.range(range, tag)
-    this.emitter.emit(definition)
+    const definition = this.writerContext.builder.vertex.range(range, tag)
+    this.writerContext.emitter.emit(definition)
     documentData.addRange(definition)
     symbolData.addDefinition(sourceFile, definition, resolverType)
     symbolData.recordDefinitionInfo(
@@ -414,7 +427,11 @@ export class Indexer {
       resolverType
     )
     if (tss.isNamedDeclaration(declaration)) {
-      const hover = getHover(this.languageService, declaration.name, sourceFile)
+      const hover = getHover(
+        this.programContext.languageService,
+        declaration.name,
+        sourceFile
+      )
       if (hover) {
         symbolData.addHover(hover)
       }

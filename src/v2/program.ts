@@ -1,6 +1,12 @@
 import ts from 'typescript-lsif'
 
-export const makeLanguageServiceHost = (
+export interface ProgramContext {
+  languageService: ts.LanguageService
+  program: ts.Program
+  typeChecker: ts.TypeChecker
+}
+
+const makeLanguageServiceHost = (
   config: ts.ParsedCommandLine,
   currentDirectory: string
 ): ts.LanguageServiceHost => {
@@ -31,4 +37,18 @@ export const makeLanguageServiceHost = (
       return snapshot || undefined
     },
   }
+}
+
+export const makeProgramContext = (
+  config: ts.ParsedCommandLine,
+  currentDirectory: string
+): ProgramContext => {
+  const host = makeLanguageServiceHost(config, currentDirectory)
+  const languageService = ts.createLanguageService(host)
+  const program = languageService.getProgram()
+  if (!program) {
+    throw new Error("Couldn't create language service with underlying program.")
+  }
+
+  return { languageService, program, typeChecker: program.getTypeChecker() }
 }
