@@ -351,7 +351,7 @@ export class UnionOrIntersectionSymbolData extends SymbolData {
 
         for (const element of this.elements) {
             super.addReference(
-                this.sourceFile!,
+                this.sourceFile,
                 element.getOrCreateReferenceResult()
             )
         }

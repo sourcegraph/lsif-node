@@ -98,6 +98,13 @@ export class Indexer {
                 )
             )
         )
+
+        // return {
+        // 	id: this.tsProject.id,
+        // 	sourceRoot: config.sourceRoot,
+        // 	outDir: config.outDir,
+        // 	references: this.tsProject.references
+        // }
     }
 
     private visit(node: ts.Node): void {
@@ -116,11 +123,9 @@ export class Indexer {
                 )
                 return true
 
-            // TODO - exports
+            // FUTURE: visit these for document symbols
+            //
             // case ts.SyntaxKind.ModuleDeclaration:
-            //   break
-
-            // TODO - document symbols
             // case ts.SyntaxKind.ClassDeclaration:
             // case ts.SyntaxKind.InterfaceDeclaration:
             // case ts.SyntaxKind.TypeParameter:
@@ -147,6 +152,86 @@ export class Indexer {
             this.currentDocumentData = undefined
         }
     }
+
+    //
+    // NEW
+
+    // private endVisitExportAssignment(node: ts.ExportAssignment): void {
+    // 	// export = foo;
+    // 	// export default foo;
+    // 	const symbol = this.tsProject.getSymbolAtLocation(node);
+    // 	if (symbol === undefined) {
+    // 		return;
+    // 	}
+    // 	// Make sure we have a symbol data;
+    // 	this.dataManager.getOrCreateSymbolData(symbol);
+    // 	const monikerPath = this.currentDocumentData.monikerPath;
+    // 	if (monikerPath === undefined) {
+    // 		return;
+    // 	}
+    // 	const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.expression);
+    // 	if (aliasedSymbol === undefined) {
+    // 		return;
+    // 	}
+    // 	const aliasedSymbolData = this.dataManager.getOrCreateSymbolData(aliasedSymbol);
+    // 	if (aliasedSymbolData === undefined) {
+    // 		return;
+    // 	}
+    // 	aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+    // 	this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
+    // }
+
+    //
+    // NEW
+
+    // private endVisitExportDeclaration(node: ts.ExportDeclaration): void {
+    // 	// `export { foo }` ==> ExportDeclaration
+    // 	// `export { _foo as foo }` ==> ExportDeclaration
+    // 	if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
+    // 		for (const element of node.exportClause.elements) {
+    // 			const symbol = this.tsProject.getSymbolAtLocation(element.name);
+    // 			if (symbol === undefined) {
+    // 				continue;
+    // 			}
+    // 			const monikerPath = this.currentDocumentData.monikerPath;
+    // 			if (monikerPath === undefined) {
+    // 				return;
+    // 			}
+    // 			// Make sure we have a symbol data;
+    // 			this.dataManager.getOrCreateSymbolData(symbol);
+    // 			const aliasedSymbol = Symbols.isAliasSymbol(symbol)
+    // 				? this.tsProject.getAliasedSymbol(symbol)
+    // 				: element.propertyName !== undefined
+    // 					? this.tsProject.getSymbolAtLocation(element.propertyName)
+    // 					: undefined;
+    // 			if (aliasedSymbol === undefined) {
+    // 				continue;
+    // 			}
+    // 			const aliasedSymbolData = this.dataManager.getOrCreateSymbolData(aliasedSymbol);
+    // 			if (aliasedSymbolData === undefined) {
+    // 				return;
+    // 			}
+    // 			aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+    // 			this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
+    // 		}
+    // 	} else if (node.moduleSpecifier !== undefined) {
+    // 		const symbol = this.tsProject.getSymbolAtLocation(node);
+    // 		if (symbol === undefined || !Symbols.isExportStar(symbol)) {
+    // 			return;
+    // 		}
+    // 		const monikerPath = this.currentDocumentData.monikerPath;
+    // 		if (monikerPath === undefined) {
+    // 			return;
+    // 		}
+    // 		this.dataManager.getOrCreateSymbolData(symbol);
+    // 		const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.moduleSpecifier);
+    // 		if (aliasedSymbol === undefined || !Symbols.isSourceFile(aliasedSymbol)) {
+    // 			return;
+    // 		}
+    // 		this.dataManager.getOrCreateSymbolData(aliasedSymbol);
+    // 		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, '', this.currentSourceFile);
+    // 	}
+    // }
 
     private visitSymbol(node: ts.Node): void {
         if (!this.currentSourceFile || !this.currentDocumentData) {
@@ -190,6 +275,52 @@ export class Indexer {
     }
 
     private getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
+        //
+        // NEW
+
+        // const isFromProjectSources = (sourceFile: ts.SourceFile): boolean => {
+        // 	const fileName = sourceFile.fileName;
+        // 	return !sourceFile.isDeclarationFile || paths.isParent(sourceRoot, fileName);
+        // };
+
+        // const isFromDependentProject = (sourceFile: ts.SourceFile): boolean => {
+        // 	if (!sourceFile.isDeclarationFile) {
+        // 		return false;
+        // 	}
+        // 	const fileName = sourceFile.fileName;
+        // 	for (let outDir of dependentOutDirs) {
+        // 		if (fileName.startsWith(outDir)) {
+        // 			return true;
+        // 		}
+        // 	}
+        // 	return false;
+        // };
+
+        // const isFromWorkspaceFolder = (sourceFile: ts.SourceFile): boolean => {
+        // 	return paths.isParent(workspaceFolder, sourceFile.fileName);
+        // };
+
+        // const document = this.vertex.document(sourceFile.fileName, sourceFile.text);
+        // const fileName = sourceFile.fileName;
+
+        // let monikerPath: string | undefined;
+        // let external: boolean = false;
+        // if (this.isSourceFileFromExternalLibrary(sourceFile)) {
+        // 	external = true;
+        // 	monikerPath = tss.computeMonikerPath(workspaceFolder, fileName);
+        // } else if (isFromProjectSources(sourceFile)) {
+        // 	monikerPath = tss.computeMonikerPath(workspaceFolder, tss.toOutLocation(fileName, sourceRoot, outDir));
+        // } else if (isFromDependentProject(sourceFile)) {
+        // 	external = true;
+        // 	monikerPath = tss.computeMonikerPath(workspaceFolder, fileName);
+        // } else if (isFromWorkspaceFolder(sourceFile)) {
+        // 	external = sourceFile.isDeclarationFile;
+        // 	monikerPath = tss.computeMonikerPath(workspaceFolder, fileName);
+        // }
+
+        // const symbol = this.typeChecker.getSymbolAtLocation(sourceFile);
+        // return [manager.createDocumentData(fileName, document, symbol !== undefined ? ModuleSystemKind.module : ModuleSystemKind.global, monikerPath, external, next), symbol];
+
         const cachedDocumentData = this.documentDatas.get(sourceFile.fileName)
         if (cachedDocumentData) {
             return cachedDocumentData
@@ -387,17 +518,15 @@ export class Indexer {
             const aliased = this.programContext.typeChecker.getAliasedSymbol(
                 symbol
             )
-            if (aliased !== undefined) {
-                const aliasedSymbolData = this.getOrCreateSymbolData(aliased)
-                if (aliasedSymbolData) {
-                    return new AliasSymbolData(
-                        this.writerContext.builder,
-                        this.writerContext.emitter,
-                        document,
-                        aliasedSymbolData,
-                        symbol.getName() !== aliased.getName()
-                    )
-                }
+            const aliasedSymbolData = this.getOrCreateSymbolData(aliased)
+            if (aliasedSymbolData) {
+                return new AliasSymbolData(
+                    this.writerContext.builder,
+                    this.writerContext.emitter,
+                    document,
+                    aliasedSymbolData,
+                    symbol.getName() !== aliased.getName()
+                )
             }
         }
 

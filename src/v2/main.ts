@@ -69,11 +69,21 @@ async function run(args: string[]): Promise<void> {
         return
     }
 
+    await processProject(args, shouldInferTypings, repositoryRoot, out)
+}
+
+async function processProject(
+    args: string[],
+    shouldInferTypings: boolean,
+    repositoryRoot: string,
+    out: string
+): Promise<any> {
     const { packageJson, projectRoot } = loadPackageJson()
     const { config, tsconfigFileName } = loadProjectConfiguration(
         ts.parseCommandLine(args)
     )
     if (config.fileNames.length === 0) {
+        // TODO - ok if references as well
         throw new Error(`No input files specified.`)
     }
 
@@ -100,10 +110,25 @@ async function run(args: string[]): Promise<void> {
     )
 
     // TODO - project references
-    // console.log({ references: program.getResolvedProjectReferences() })
+    // const dependsOn: ProjectInfo[] = [];
+    // const references = options.noProjectReferences ? undefined : programContext.program.getResolvedProjectReferences();
+    // if (references) {
+    // 	for (const reference of references) {
+    // 		if (reference) {
+    // 			const result = await processProject(reference.commandLine, emitter, typingsInstaller, dataManager, importMonikers, exportMonikers, options);
+    // 			if (typeof result === 'number') {
+    // 				return result;
+    // 			}
+    // 			dependsOn.push(result);
+    // 		}
+    // 	}
+    // }
+
+    // TODO - share indexer
+    // TODO - need to reload after fetching dependent projects for some reason?
 
     const indexer = new Indexer(writerContext, programContext, pathContext)
-    indexer.index()
+    indexer.index() // TODO - return type?
 }
 
 main().catch((error) => {
