@@ -1,22 +1,20 @@
 import * as fs from 'fs'
-import * as path from 'path'
-import { readPackageJson, PackageJson } from './package'
-import * as os from 'os'
-import { EdgeBuilder, VertexBuilder } from './graph'
-import * as tss from './typescripts'
 import {
     Edge,
-    Vertex,
-    Id,
-    Moniker,
-    PackageInformation,
-    packageInformation,
     EdgeLabels,
     ElementTypes,
-    VertexLabels,
+    Id,
+    Moniker,
     MonikerKind,
+    PackageInformation,
+    packageInformation,
+    Vertex,
+    VertexLabels,
 } from 'lsif-protocol'
-import * as Is from './util'
+import * as os from 'os'
+import * as path from 'path'
+import { parseIdentifier, string as isString } from './debt'
+import { PackageJson, readPackageJson } from './package'
 
 const sanitizeMonikerPath = (packageJson: PackageJson, path: string): string =>
     path !== packageJson.main && path !== packageJson.typings ? '' : path
@@ -35,12 +33,9 @@ interface PackageDataPair {
 }
 
 export class Emitter {
-    private _id = 0
-    private _fd: number
-    private _vertex: VertexBuilder
-    private _edge: EdgeBuilder
-
-    private packageInformation: PackageInformation | undefined
+    private id = 0
+    private fd: number
+    private packageInformation?: PackageInformation
     private packageData: Map<string, PackageDataPair | null>
 
     public constructor(
@@ -48,41 +43,32 @@ export class Emitter {
         private projectRoot: string,
         private packageJson?: PackageJson
     ) {
-        this._fd = fs.openSync(filename, 'w')
-        this._vertex = new VertexBuilder(this.nextId.bind(this))
-        this._edge = new EdgeBuilder(this.nextId.bind(this))
+        this.fd = fs.openSync(filename, 'w')
         this.packageData = new Map()
     }
 
-    private nextId(): number {
-        return this._id++
-    }
+    public emit<T extends Vertex | Edge>(element: T): T {
+        const id: T['id'] = this.id++
+        const elementWithId: T = { ...element, id }
 
-    public get vertex(): VertexBuilder {
-        return this._vertex
-    }
-
-    public get edge(): EdgeBuilder {
-        return this._edge
-    }
-
-    public emit(element: Vertex | Edge): void {
         const buffer = Buffer.from(
-            JSON.stringify(element, undefined, 0) + os.EOL,
+            JSON.stringify(elementWithId, undefined, 0) + os.EOL,
             'utf8'
         )
 
         let offset = 0
         while (offset < buffer.length) {
-            offset += fs.writeSync(this._fd, buffer, offset)
+            offset += fs.writeSync(this.fd, buffer, offset)
         }
+
+        return elementWithId
     }
 
     public handleImportMoniker(
         xpath: string,
         symbol?: string
     ): Moniker | undefined {
-        const tscMoniker = tss.parseIdentifier(xpath, symbol)
+        const tscMoniker = parseIdentifier(xpath, symbol)
         if (!tscMoniker.path) {
             return undefined
         }
@@ -110,7 +96,7 @@ export class Emitter {
         path: string,
         symbol?: string
     ): Moniker | undefined {
-        const tscMoniker = tss.parseIdentifier(path, symbol)
+        const tscMoniker = parseIdentifier(path, symbol)
         if (!tscMoniker.path) {
             return undefined
         }
@@ -182,44 +168,30 @@ export class Emitter {
         return packageData || undefined
     }
 
-    private createPackageData(packageJson: PackageJson): PackageInformation {
-        const repositoryFields = Is.string(packageJson.repository?.url)
-            ? { repository: packageJson.repository }
-            : {}
+    private ensurePackageInformation(): PackageInformation | undefined {
+        if (!this.packageJson) {
+            return undefined
+        }
 
-        const packageInfo: PackageInformation = {
-            id: this.nextId(),
+        if (this.packageInformation === undefined) {
+            this.packageInformation = this.createPackageData(this.packageJson)
+        }
+
+        return this.packageInformation
+    }
+
+    private createPackageData(packageJson: PackageJson): PackageInformation {
+        return this.emit<PackageInformation>({
+            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.packageInformation,
             name: packageJson.name,
             manager: 'npm',
             version: packageJson.version,
-            ...repositoryFields,
-        }
-
-        this.emit(packageInfo)
-        return packageInfo
-    }
-
-    private ensurePackageInformation(): PackageInformation | undefined {
-        if (!this.packageJson || this.packageInformation !== undefined) {
-            return this.packageInformation
-        }
-
-        this.packageInformation = {
-            id: this.nextId(),
-            type: ElementTypes.vertex,
-            label: VertexLabels.packageInformation,
-            name: this.packageJson.name,
-            manager: 'npm',
-            version: this.packageJson.version,
-            ...(Is.string(this.packageJson.repository?.url)
-                ? { repository: this.packageJson.repository }
+            ...(isString(packageJson.repository?.url)
+                ? { repository: packageJson.repository }
                 : {}),
-        }
-
-        this.emit(this.packageInformation)
-        return this.packageInformation
+        })
     }
 
     private emitMoniker(
@@ -227,24 +199,23 @@ export class Emitter {
         kind: MonikerKind,
         packageInformationId: Id
     ): Moniker {
-        const npmMoniker: Moniker = {
-            id: this.nextId(),
+        const npmMoniker = this.emit<Moniker>({
+            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.moniker,
             kind,
             scheme: 'npm',
             identifier,
-        }
-        const packageInformation: packageInformation = {
-            id: this.nextId(),
+        })
+
+        this.emit<packageInformation>({
+            id: -1, // TODO
             type: ElementTypes.edge,
             label: EdgeLabels.packageInformation,
             outV: npmMoniker.id,
             inV: packageInformationId,
-        }
+        })
 
-        this.emit(npmMoniker)
-        this.emit(packageInformation)
         return npmMoniker
     }
 }

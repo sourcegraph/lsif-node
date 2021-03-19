@@ -1,5 +1,5 @@
 import * as fs from 'fs'
-import * as Is from './util'
+import { string as isString } from './debt'
 
 export interface PackageJson {
     name: string
@@ -29,7 +29,7 @@ const readPackageJsonInternal = (filename: string): PackageJson | undefined => {
         content
     ) as Partial<PackageJson>
 
-    if (!Is.string(name)) {
+    if (!isString(name)) {
         return undefined
     }
 

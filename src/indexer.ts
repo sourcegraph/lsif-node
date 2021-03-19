@@ -1,23 +1,49 @@
 import {
-    DefinitionTag,
+    contains,
+    DefinitionRange,
+    Document,
+    EdgeLabels,
+    ElementTypes,
     ItemEdgeProperties,
     lsp,
+    MetaData,
+    Project,
     RangeTagTypes,
-    ReferenceTag,
+    ReferenceRange,
+    ResultSet,
+    VertexLabels,
 } from 'lsif-protocol'
 import ts, { ExportAssignment, ExportDeclaration } from 'typescript-lsif'
 import { URI } from 'vscode-uri'
-import { Symbols } from './lsif'
-import * as tss from './typescripts'
-import { DocumentData } from './document'
 import {
     AliasSymbolData,
+    DocumentData,
     MethodSymbolData,
     SymbolData,
     TransientSymbolData,
     UnionOrIntersectionSymbolData,
-} from './symbol'
-import { Emitter } from './writer'
+} from './data'
+import {
+    computeMonikerPath,
+    createDefinitionInfo,
+    createMonikerIdentifier,
+    createSymbolKey,
+    getCompositeSymbols,
+    getSymbolFromNode,
+    getSymbolParent,
+    isAliasSymbol,
+    isComposite,
+    isMethodSymbol,
+    isNamedDeclaration,
+    isSourceFile,
+    isTransient,
+    isTypeAlias,
+    makeAbsolute,
+    Program,
+    Symbols,
+    toOutLocation,
+} from './debt'
+import { Emitter } from './emitter'
 
 export const version = '0.0.1'
 const phantomPosition = { line: 0, character: 0 }
@@ -106,23 +132,27 @@ export class Indexer {
     }
 
     public index(): void {
-        const metadata = this.emitter.vertex.metaData(
+        this.emitter.emit<MetaData>({
+            id: -1, // TODO
+            type: ElementTypes.vertex,
+            label: VertexLabels.metaData,
             version,
-            URI.file(this.repositoryRoot).toString(true),
-            { name: 'lsif-tsc', args: ts.sys.args, version }
-        )
-        this.emitter.emit(metadata)
+            projectRoot: URI.file(this.repositoryRoot).toString(true),
+            positionEncoding: 'utf-16',
+            toolInfo: { name: 'lsif-tsc', args: ts.sys.args, version },
+        })
 
-        const project = this.emitter.vertex.project()
-        this.emitter.emit(project)
+        const project = this.emitter.emit<Project>({
+            id: -1, // TODO
+            type: ElementTypes.vertex,
+            label: VertexLabels.project,
+            kind: 'typescript',
+        })
 
         for (const sourceFile of this.program.getSourceFiles()) {
             if (
-                tss.Program.isSourceFileDefaultLibrary(
-                    this.program,
-                    sourceFile
-                ) ||
-                tss.Program.isSourceFileFromExternalLibrary(
+                Program.isSourceFileDefaultLibrary(this.program, sourceFile) ||
+                Program.isSourceFileFromExternalLibrary(
                     this.program,
                     sourceFile
                 )
@@ -141,14 +171,15 @@ export class Indexer {
             documentData?.end()
         }
 
-        this.emitter.emit(
-            this.emitter.edge.contains(
-                project,
-                Array.from(this.documentDatas.values()).map(
-                    (documentData) => documentData!.document
-                )
-            )
-        )
+        this.emitter.emit<contains>({
+            id: -1, // TODO
+            type: ElementTypes.edge,
+            label: EdgeLabels.contains,
+            outV: project.id,
+            inVs: Array.from(this.documentDatas.values()).map(
+                (documentData) => documentData!.document.id
+            ),
+        })
 
         // return {
         // 	id: this.tsProject.id,
@@ -230,10 +261,6 @@ export class Indexer {
                     return
                 }
 
-                // TODO
-                // const aliasedSymbolData = this.getOrCreateSymbolData(aliasedSymbol)
-                // aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported)
-
                 this.exportSymbol(
                     aliasedSymbol,
                     monikerPath,
@@ -242,8 +269,8 @@ export class Indexer {
                 )
                 break
 
-            // 	// `export { foo }` ==> ExportDeclaration
-            // 	// `export { _foo as foo }` ==> ExportDeclaration
+            // `export { foo }` ==> ExportDeclaration
+            // `export { _foo as foo }` ==> ExportDeclaration
             case ts.SyntaxKind.ExportDeclaration:
                 if (!this.currentDocumentData) {
                     throw new Error('Illegal statement context')
@@ -266,8 +293,10 @@ export class Indexer {
                         if (monikerPath === undefined) {
                             return
                         }
-                        // Make sure we have a symbol data;
+
+                        // Make sure we have a symbol data
                         this.getOrCreateSymbolData(symbol)
+
                         const aliasedSymbol =
                             (symbol.getFlags() & ts.SymbolFlags.Alias) !== 0
                                 ? this.typeChecker.getAliasedSymbol(symbol)
@@ -277,9 +306,7 @@ export class Indexer {
                         if (aliasedSymbol === undefined) {
                             continue
                         }
-                        // TODO
-                        // const aliasedSymbolData = this.getOrCreateSymbolData(aliasedSymbol);
-                        // aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+
                         this.exportSymbol(
                             aliasedSymbol,
                             monikerPath,
@@ -306,7 +333,7 @@ export class Indexer {
                     )
                     if (
                         aliasedSymbol === undefined ||
-                        !tss.isSourceFile(aliasedSymbol)
+                        !isSourceFile(aliasedSymbol)
                     ) {
                         return
                     }
@@ -328,7 +355,7 @@ export class Indexer {
     private getSymbolAtLocation(node: ts.Node): ts.Symbol | undefined {
         let result = this.typeChecker.getSymbolAtLocation(node)
         if (result === undefined) {
-            result = tss.getSymbolFromNode(node)
+            result = getSymbolFromNode(node)
         }
         return result
     }
@@ -373,7 +400,7 @@ export class Indexer {
             return
         }
 
-        const definitionInfo = tss.createDefinitionInfo(
+        const definitionInfo = createDefinitionInfo(
             this.currentSourceFile,
             node
         )
@@ -381,28 +408,37 @@ export class Indexer {
             return
         }
 
-        const tag: ReferenceTag = {
-            type: RangeTagTypes.reference,
-            text: node.getText(),
-        }
-        const reference = this.emitter.vertex.range(
-            rangeFromNode(this.currentSourceFile, node),
-            tag
-        )
-
-        this.emitter.emit(reference)
-        this.currentDocumentData.addRange(reference)
+        const referenceRange = this.emitter.emit<ReferenceRange>({
+            id: -1, // TODO
+            type: ElementTypes.vertex,
+            label: VertexLabels.range,
+            ...rangeFromNode(this.currentSourceFile, node),
+            tag: {
+                type: RangeTagTypes.reference,
+                text: node.getText(),
+            },
+        })
+        this.currentDocumentData.addRange(referenceRange)
         symbolData.addReference(
             this.currentSourceFile,
-            reference,
+            referenceRange,
             ItemEdgeProperties.references
         )
     }
 
     private getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
-        //
-        // NEW
+        const externalLibrary = Program.isSourceFileFromExternalLibrary(
+            this.program,
+            sourceFile
+        )
 
+        const monikerPath = externalLibrary
+            ? computeMonikerPath(this.projectRoot, sourceFile.fileName)
+            : this.computeMonikerPath(sourceFile)
+
+        //
+        // TODO: NEW
+        //
         // const isFromProjectSources = (sourceFile: ts.SourceFile): boolean => {
         // 	const fileName = sourceFile.fileName;
         // 	return !sourceFile.isDeclarationFile || paths.isParent(sourceRoot, fileName);
@@ -451,16 +487,13 @@ export class Indexer {
             return cachedDocumentData
         }
 
-        const document = this.emitter.vertex.document(sourceFile.fileName)
-
-        const externalLibrary = tss.Program.isSourceFileFromExternalLibrary(
-            this.program,
-            sourceFile
-        )
-
-        const monikerPath = externalLibrary
-            ? tss.computeMonikerPath(this.projectRoot, sourceFile.fileName)
-            : this.computeMonikerPath(sourceFile)
+        const document = this.emitter.emit<Document>({
+            id: -1, // TODO
+            type: ElementTypes.vertex,
+            label: VertexLabels.document,
+            uri: URI.file(makeAbsolute(sourceFile.fileName)).toString(true),
+            languageId: 'typescript',
+        })
 
         const documentData = new DocumentData(
             this.emitter,
@@ -480,13 +513,9 @@ export class Indexer {
             (sourceFile.fileName.startsWith(this.rootDir) &&
                 sourceFile.fileName.charAt(this.rootDir.length) === '/')
         ) {
-            return tss.computeMonikerPath(
+            return computeMonikerPath(
                 this.projectRoot,
-                tss.toOutLocation(
-                    sourceFile.fileName,
-                    this.rootDir,
-                    this.outDir
-                )
+                toOutLocation(sourceFile.fileName, this.rootDir, this.outDir)
             )
         }
         // TODO - project references
@@ -508,7 +537,7 @@ export class Indexer {
             throw new Error('Illegal symbol context')
         }
 
-        const id = tss.createSymbolKey(this.typeChecker, symbol)
+        const id = createSymbolKey(this.typeChecker, symbol)
         const cachedSymbolData = this.symbolDatas.get(id)
         if (cachedSymbolData) {
             return cachedSymbolData
@@ -545,16 +574,10 @@ export class Indexer {
         }
 
         let monikerIdentifier: string | undefined
-        if (tss.isSourceFile(symbol) && monikerPath !== undefined) {
-            monikerIdentifier = tss.createMonikerIdentifier(
-                monikerPath,
-                undefined
-            )
+        if (isSourceFile(symbol) && monikerPath !== undefined) {
+            monikerIdentifier = createMonikerIdentifier(monikerPath, undefined)
         } else if (exportPath !== undefined && exportPath !== '') {
-            monikerIdentifier = tss.createMonikerIdentifier(
-                monikerPath,
-                exportPath
-            )
+            monikerIdentifier = createMonikerIdentifier(monikerPath, exportPath)
         }
 
         const moniker =
@@ -590,10 +613,15 @@ export class Indexer {
         }
         const document = this.currentDocumentData.document
         const sourceFile = this.currentSourceFile
+        const resultSet = this.emitter.emit<ResultSet>({
+            id: -1, // TODO
+            type: ElementTypes.vertex,
+            label: VertexLabels.resultSet,
+        })
 
-        if (tss.isTransient(symbol)) {
-            if (tss.isComposite(this.typeChecker, symbol, node)) {
-                const composites = tss.getCompositeSymbols(
+        if (isTransient(symbol)) {
+            if (isComposite(this.typeChecker, symbol, node)) {
+                const composites = getCompositeSymbols(
                     this.typeChecker,
                     symbol,
                     node
@@ -602,6 +630,7 @@ export class Indexer {
                     return new UnionOrIntersectionSymbolData(
                         this.emitter,
                         document,
+                        resultSet,
                         composites.map((symbol) =>
                             this.getOrCreateSymbolData(symbol)
                         ),
@@ -613,29 +642,34 @@ export class Indexer {
             // Problem: Symbols that come from the lib*.d.ts files are marked transient
             // as well. Check if the symbol has some other meaningful flags
             if ((symbol.getFlags() & ~ts.SymbolFlags.Transient) === 0) {
-                return new TransientSymbolData(this.emitter, document)
+                return new TransientSymbolData(
+                    this.emitter,
+                    document,
+                    resultSet
+                )
             }
         }
 
-        if (tss.isTypeAlias(symbol)) {
+        if (isTypeAlias(symbol)) {
             // TODO - forward symbol information
         }
 
-        if (tss.isAliasSymbol(symbol)) {
+        if (isAliasSymbol(symbol)) {
             const aliased = this.typeChecker.getAliasedSymbol(symbol)
             const aliasedSymbolData = this.getOrCreateSymbolData(aliased)
             if (aliasedSymbolData) {
                 return new AliasSymbolData(
                     this.emitter,
                     document,
+                    resultSet,
                     aliasedSymbolData,
                     symbol.getName() !== aliased.getName()
                 )
             }
         }
 
-        if (tss.isMethodSymbol(symbol)) {
-            const container = tss.getSymbolParent(symbol)
+        if (isMethodSymbol(symbol)) {
+            const container = getSymbolParent(symbol)
             const baseSymbols = (
                 (container &&
                     this.symbols.findBaseMembers(
@@ -648,12 +682,13 @@ export class Indexer {
             return new MethodSymbolData(
                 this.emitter,
                 document,
+                resultSet,
                 baseSymbols,
                 sourceFile
             )
         }
 
-        return new SymbolData(this.emitter, document)
+        return new SymbolData(this.emitter, document, resultSet)
     }
 
     private emitDefinition(
@@ -664,22 +699,26 @@ export class Indexer {
     ): void {
         const sourceFile = declaration.getSourceFile()
         const documentData = this.getOrCreateDocumentData(sourceFile)
-        const range = ts.isSourceFile(declaration)
-            ? phantomRange
-            : rangeFromNode(sourceFile, node)
-        const tag: DefinitionTag = {
-            type: RangeTagTypes.definition,
-            text,
-            kind:
-                symbolKindMap.get(declaration.kind) || lsp.SymbolKind.Property,
-            fullRange: rangeFromNode(sourceFile, declaration),
-        }
-        const definition = this.emitter.vertex.range(range, tag)
-        this.emitter.emit(definition)
-        documentData.addRange(definition)
-        symbolData.addDefinition(sourceFile, definition)
-        symbolData.addDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))
-        if (tss.isNamedDeclaration(declaration)) {
+        const definitionRange = this.emitter.emit<DefinitionRange>({
+            id: -1, // TODO
+            type: ElementTypes.vertex,
+            label: VertexLabels.range,
+            ...(ts.isSourceFile(declaration)
+                ? phantomRange
+                : rangeFromNode(sourceFile, node)),
+            tag: {
+                type: RangeTagTypes.definition,
+                text,
+                kind:
+                    symbolKindMap.get(declaration.kind) ||
+                    lsp.SymbolKind.Property,
+                fullRange: rangeFromNode(sourceFile, declaration),
+            },
+        })
+        documentData.addRange(definitionRange)
+        symbolData.addDefinition(sourceFile, definitionRange)
+        symbolData.addDefinitionInfo(createDefinitionInfo(sourceFile, node))
+        if (isNamedDeclaration(declaration)) {
             const hover = getHover(
                 this.languageService,
                 declaration.name,

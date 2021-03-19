@@ -1,18 +1,64 @@
 import {
+    contains,
     DefinitionRange,
     DefinitionResult,
     Document,
+    EdgeLabels,
+    ElementTypes,
+    HoverResult,
+    item,
     ItemEdgeProperties,
     lsp,
+    moniker,
     Moniker,
+    next,
     Range,
     ReferenceResult,
     ResultSet,
+    textDocument_definition,
+    textDocument_hover,
+    textDocument_references,
     VertexLabels,
 } from 'lsif-protocol'
 import ts from 'typescript-lsif'
-import { Emitter } from './writer'
-import * as tss from './typescripts'
+import {
+    DefinitionInfo,
+    getUniqueSourceFiles,
+    isNamedDeclaration,
+    isValueModule,
+} from './debt'
+import { Emitter } from './emitter'
+
+export class DocumentData {
+    private ranges: Range[] = []
+
+    public constructor(
+        private emitter: Emitter,
+        public readonly document: Document,
+        public readonly externalLibrary: boolean,
+        public readonly monikerPath?: string
+    ) {}
+
+    public begin(): void {
+        // no-op
+    }
+
+    public addRange(range: Range): void {
+        this.ranges.push(range)
+    }
+
+    public end(): void {
+        if (this.ranges.length > 0) {
+            this.emitter.emit<contains>({
+                id: -1, // TODO
+                type: ElementTypes.edge,
+                label: EdgeLabels.contains,
+                outV: this.document.id,
+                inVs: this.ranges.map((v) => v.id),
+            })
+        }
+    }
+}
 
 type ReferenceRangesProperties =
     | ItemEdgeProperties.declarations
@@ -20,30 +66,24 @@ type ReferenceRangesProperties =
     | ItemEdgeProperties.references
 
 export class SymbolData {
-    private resultSet: ResultSet
+    private definitionInfo: DefinitionInfo[] = []
     private definitionRanges: DefinitionRange[] = []
     private referenceResults: ReferenceResult[] = []
     private referenceRanges = new Map<ReferenceRangesProperties, Range[]>()
-    private definitionInfo: tss.DefinitionInfo[] = []
 
     public constructor(
         protected emitter: Emitter,
-        protected document: Document
-    ) {
-        this.resultSet = this.emitter.vertex.resultSet()
-    }
-
-    public getResultSet(): ResultSet {
-        return this.resultSet
-    }
+        protected document: Document,
+        public readonly resultSet: ResultSet
+    ) {}
 
     public begin(): void {
-        this.emitter.emit(this.resultSet)
+        // no-op
     }
 
     public getSourceFiles(symbol: ts.Symbol, node?: ts.Node): ts.SourceFile[] {
         return Array.from(
-            tss.getUniqueSourceFiles(symbol.getDeclarations()).values()
+            getUniqueSourceFiles(symbol.getDeclarations()).values()
         )
     }
 
@@ -59,14 +99,14 @@ export class SymbolData {
             return undefined
         }
 
-        if (tss.isNamedDeclaration(node)) {
+        if (isNamedDeclaration(node)) {
             return {
                 text: node.name.getText(),
                 node: node.name,
             }
         }
 
-        if (tss.isValueModule(symbol) && ts.isSourceFile(node)) {
+        if (isValueModule(symbol) && ts.isSourceFile(node)) {
             return { text: '', node }
         }
 
@@ -78,8 +118,16 @@ export class SymbolData {
         definition: DefinitionRange,
         recordAsReference = true
     ): void {
-        this.emitter.emit(this.emitter.edge.next(definition, this.resultSet))
+        this.emitter.emit<next>({
+            id: -1, // TODO
+            type: ElementTypes.edge,
+            label: EdgeLabels.next,
+            outV: definition.id,
+            inV: this.resultSet.id,
+        })
+
         this.definitionRanges.push(definition)
+
         if (recordAsReference) {
             this.addReference(
                 sourceFile,
@@ -89,13 +137,13 @@ export class SymbolData {
         }
     }
 
-    public addDefinitionInfo(info: tss.DefinitionInfo): void {
+    public addDefinitionInfo(info: DefinitionInfo): void {
         this.definitionInfo.push(info)
     }
 
-    public hasDefinitionInfo(info: tss.DefinitionInfo): boolean {
+    public hasDefinitionInfo(info: DefinitionInfo): boolean {
         return this.definitionInfo.some((definitionInfo) =>
-            tss.DefinitionInfo.equals(info, definitionInfo)
+            DefinitionInfo.equals(info, definitionInfo)
         )
     }
 
@@ -107,15 +155,17 @@ export class SymbolData {
         switch (reference.label) {
             case VertexLabels.range:
                 if (property) {
-                    this.emitter.emit(
-                        this.emitter.edge.next(reference, this.resultSet)
-                    )
-                    this.referenceRanges.set(
-                        property,
-                        (this.referenceRanges.get(property) || []).concat([
-                            reference,
-                        ])
-                    )
+                    this.emitter.emit<next>({
+                        id: -1, // TODO
+                        type: ElementTypes.edge,
+                        label: EdgeLabels.next,
+                        outV: reference.id,
+                        inV: this.resultSet.id,
+                    })
+
+                    const oldList = this.referenceRanges.get(property) || []
+                    const newList = oldList.concat([reference])
+                    this.referenceRanges.set(property, newList)
                 }
                 break
 
@@ -126,71 +176,110 @@ export class SymbolData {
     }
 
     public addHover(hover: lsp.Hover): void {
-        const hoverResult = this.emitter.vertex.hoverResult(hover)
-        this.emitter.emit(hoverResult)
-        this.emitter.emit(this.emitter.edge.hover(this.resultSet, hoverResult))
+        const hoverResult = this.emitter.emit<HoverResult>({
+            id: -1, // TODO
+            type: ElementTypes.vertex,
+            label: VertexLabels.hoverResult,
+            result: hover,
+        })
+
+        this.emitter.emit<textDocument_hover>({
+            id: -1, // TODO
+            type: ElementTypes.edge,
+            label: EdgeLabels.textDocument_hover,
+            outV: this.resultSet.id,
+            inV: hoverResult.id,
+        })
     }
 
     public addMoniker(moniker: Moniker): void {
-        this.emitter.emit(this.emitter.edge.moniker(this.resultSet, moniker))
+        this.emitter.emit<moniker>({
+            id: -1, // TODO
+            type: ElementTypes.edge,
+            label: EdgeLabels.moniker,
+            outV: this.resultSet.id,
+            inV: moniker.id,
+        })
     }
 
     public end(): void {
         if (this.definitionRanges.length > 0) {
             const definitionResult = this.getOrCreateDefinitionResult()
 
-            this.emitter.emit(
-                this.emitter.edge.item(
-                    definitionResult,
-                    this.definitionRanges,
-                    this.document
-                )
-            )
+            this.emitter.emit<item>({
+                id: -1, // TODO
+                type: ElementTypes.edge,
+                label: EdgeLabels.item,
+                outV: definitionResult.id,
+                inVs: this.definitionRanges.map((v) => v.id),
+                document: this.document.id,
+            })
         }
 
         if (this.referenceRanges.size > 0) {
             const referenceResult = this.getOrCreateReferenceResult()
 
             for (const [property, values] of this.referenceRanges.entries()) {
-                this.emitter.emit(
-                    this.emitter.edge.item(
-                        referenceResult,
-                        values,
-                        this.document,
-                        property
-                    )
-                )
+                this.emitter.emit<item>({
+                    id: -1, //
+                    type: ElementTypes.edge,
+                    label: EdgeLabels.item,
+                    outV: referenceResult.id,
+                    inVs: values.map((v) => v.id),
+                    document: this.document.id,
+                    property,
+                })
             }
         }
 
         if (this.referenceResults.length > 0) {
             const referenceResult = this.getOrCreateReferenceResult()
 
-            this.emitter.emit(
-                this.emitter.edge.item(
-                    referenceResult,
-                    this.referenceResults,
-                    this.document
-                )
-            )
+            this.emitter.emit<item>({
+                id: -1, // TODO
+                type: ElementTypes.edge,
+                label: EdgeLabels.item,
+                outV: referenceResult.id,
+                inVs: this.referenceResults.map((v) => v.id),
+                document: this.document.id,
+                property: ItemEdgeProperties.referenceResults,
+            })
         }
     }
 
     public getOrCreateDefinitionResult(): DefinitionResult {
-        const definitionResult = this.emitter.vertex.definitionResult()
-        this.emitter.emit(definitionResult)
-        this.emitter.emit(
-            this.emitter.edge.definition(this.resultSet, definitionResult)
-        )
+        const definitionResult = this.emitter.emit<DefinitionResult>({
+            id: -1, // TODO
+            type: ElementTypes.vertex,
+            label: VertexLabels.definitionResult,
+        })
+
+        this.emitter.emit<textDocument_definition>({
+            id: -1, // TODO
+            type: ElementTypes.edge,
+            label: EdgeLabels.textDocument_definition,
+            outV: this.resultSet.id,
+            inV: definitionResult.id,
+        })
+
         return definitionResult
     }
 
     public getOrCreateReferenceResult(): ReferenceResult {
-        const referenceResult = this.emitter.vertex.referencesResult()
-        this.emitter.emit(referenceResult)
-        this.emitter.emit(
-            this.emitter.edge.references(this.resultSet, referenceResult)
-        )
+        const referenceResult = this.emitter.emit<ReferenceResult>({
+            id: -1, // TODO
+            type: ElementTypes.vertex,
+            label: VertexLabels.referenceResult,
+        })
+
+        this.emitter.emit<textDocument_references>({
+            id: -1, // TODO
+            type: ElementTypes.edge,
+            label: EdgeLabels.textDocument_references,
+            outV: this.resultSet.id,
+            inV: referenceResult.id,
+        })
+
         return referenceResult
     }
 }
@@ -199,21 +288,23 @@ export class AliasSymbolData extends SymbolData {
     constructor(
         emitter: Emitter,
         document: Document,
+        resultSet: ResultSet,
         private aliased: SymbolData,
         private rename: boolean
     ) {
-        super(emitter, document)
+        super(emitter, document, resultSet)
     }
 
     public begin(): void {
         super.begin()
 
-        this.emitter.emit(
-            this.emitter.edge.next(
-                this.getResultSet(),
-                this.aliased.getResultSet()
-            )
-        )
+        this.emitter.emit<next>({
+            id: -1, // TODO
+            type: ElementTypes.edge,
+            label: EdgeLabels.next,
+            outV: this.resultSet.id,
+            inV: this.aliased.resultSet.id,
+        })
     }
 
     public addDefinition(
@@ -224,9 +315,13 @@ export class AliasSymbolData extends SymbolData {
         if (this.rename) {
             super.addDefinition(sourceFile, definition, false)
         } else {
-            this.emitter.emit(
-                this.emitter.edge.next(definition, this.getResultSet())
-            )
+            this.emitter.emit<next>({
+                id: -1, // TODO
+                type: ElementTypes.edge,
+                label: EdgeLabels.next,
+                outV: definition.id,
+                inV: this.resultSet.id,
+            })
             super.addReference(
                 sourceFile,
                 definition,
@@ -241,9 +336,13 @@ export class AliasSymbolData extends SymbolData {
         property: ReferenceRangesProperties
     ): void {
         if (reference.label === VertexLabels.range) {
-            this.emitter.emit(
-                this.emitter.edge.next(reference, this.getResultSet())
-            )
+            this.emitter.emit<next>({
+                id: -1, // TODO
+                type: ElementTypes.edge,
+                label: EdgeLabels.next,
+                outV: reference.id,
+                inV: this.resultSet.id,
+            })
         }
         this.aliased.addReference(sourceFile, reference, property)
     }
@@ -253,10 +352,11 @@ export class MethodSymbolData extends SymbolData {
     constructor(
         emitter: Emitter,
         document: Document,
+        resultSet: ResultSet,
         private bases: SymbolData[],
         private sourceFile: ts.SourceFile
     ) {
-        super(emitter, document)
+        super(emitter, document, resultSet)
     }
 
     public begin(): void {
@@ -299,9 +399,13 @@ export class MethodSymbolData extends SymbolData {
         }
 
         if (reference.label === 'range') {
-            this.emitter.emit(
-                this.emitter.edge.next(reference, this.getResultSet())
-            )
+            this.emitter.emit<next>({
+                id: -1, // TODO
+                type: ElementTypes.edge,
+                label: EdgeLabels.next,
+                outV: reference.id,
+                inV: this.resultSet.id,
+            })
         }
         for (const base of this.bases) {
             base.addReference(sourceFile, reference, property)
@@ -326,7 +430,7 @@ export class TransientSymbolData extends SymbolData {
         return
     }
 
-    public addDefinitionInfo(info: tss.DefinitionInfo): void {
+    public addDefinitionInfo(info: DefinitionInfo): void {
         return
     }
 }
@@ -335,10 +439,11 @@ export class UnionOrIntersectionSymbolData extends SymbolData {
     constructor(
         emitter: Emitter,
         document: Document,
+        resultSet: ResultSet,
         private elements: SymbolData[],
         private sourceFile: ts.SourceFile
     ) {
-        super(emitter, document)
+        super(emitter, document, resultSet)
     }
 
     public begin(): void {
@@ -375,7 +480,7 @@ export class UnionOrIntersectionSymbolData extends SymbolData {
         return
     }
 
-    public addDefinitionInfo(info: tss.DefinitionInfo): void {
+    public addDefinitionInfo(info: DefinitionInfo): void {
         return
     }
 }

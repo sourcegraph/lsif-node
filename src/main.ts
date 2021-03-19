@@ -1,13 +1,17 @@
+import { execSync } from 'child_process'
+import minimist from 'minimist'
 import * as path from 'path'
 import ts from 'typescript-lsif'
+import {
+    getDefaultCompilerOptions,
+    inferTypings,
+    makeAbsolute,
+    normalizePath,
+    Program,
+} from './debt'
+import { Emitter } from './emitter'
 import { Indexer, version } from './indexer'
-import { Emitter } from './writer'
-import { inferTypings } from './typings'
-import minimist from 'minimist'
 import { readPackageJson } from './package'
-import { LanguageServiceHost } from './program'
-import * as tss from './typescripts'
-import { execSync } from 'child_process'
 
 interface Options {
     help: boolean
@@ -70,12 +74,47 @@ async function run(args: string[]): Promise<void> {
         return
     }
 
-    const repositoryRoot = tss.makeAbsolute(
+    const repositoryRoot = makeAbsolute(
         rawRepositoryRoot ||
             execSync('git rev-parse --show-toplevel').toString().trim()
     )
 
     await processProject(args, shouldInferTypings, repositoryRoot, out)
+}
+
+class LanguageServiceHost implements ts.LanguageServiceHost {
+    private scriptSnapshots = new Map<string, ts.IScriptSnapshot | null>()
+
+    constructor(
+        private config: ts.ParsedCommandLine,
+        private currentDirectory: string
+    ) {}
+
+    public getProjectVersion = () => '0'
+    public getScriptVersion = () => '0'
+    public getCurrentDirectory = () => this.currentDirectory
+    public getCompilationSettings = () => this.config.options
+    public getProjectReferences = () => this.config.projectReferences
+    public getScriptFileNames = () => this.config.fileNames
+    public directoryExists = ts.sys.directoryExists.bind(ts.sys)
+    public fileExists = ts.sys.fileExists.bind(ts.sys)
+    public getDefaultLibFileName = ts.getDefaultLibFilePath.bind(ts)
+    public getDirectories = ts.sys.getDirectories.bind(ts.sys)
+    public readDirectory = ts.sys.readDirectory.bind(ts.sys)
+    public readFile = ts.sys.readFile.bind(ts.sys)
+
+    public getScriptSnapshot(fileName: string): ts.IScriptSnapshot | undefined {
+        const cachedSnapshot = this.scriptSnapshots.get(fileName)
+        if (cachedSnapshot !== undefined) {
+            return cachedSnapshot || undefined
+        }
+
+        const snapshot = ts.sys.fileExists(fileName)
+            ? ts.ScriptSnapshot.fromString(ts.sys.readFile(fileName) || '')
+            : null
+        this.scriptSnapshots.set(fileName, snapshot)
+        return snapshot || undefined
+    }
 }
 
 async function processProject(
@@ -84,8 +123,8 @@ async function processProject(
     repositoryRoot: string,
     out: string
 ): Promise<any> {
-    const packageFile = tss.makeAbsolute('package.json')
-    const projectRoot = tss.makeAbsolute(path.posix.dirname(packageFile))
+    const packageFile = makeAbsolute('package.json')
+    const projectRoot = makeAbsolute(path.posix.dirname(packageFile))
     const packageJson = readPackageJson(packageFile)
 
     let tsconfigFileName: string | undefined
@@ -117,7 +156,7 @@ async function processProject(
             )
         }
         if (!newConfig.compilerOptions) {
-            newConfig.compilerOptions = tss.getDefaultCompilerOptions(
+            newConfig.compilerOptions = getDefaultCompilerOptions(
                 tsconfigFileName
             )
         }
@@ -165,14 +204,14 @@ async function processProject(
 
     const rootDir =
         (compilerOptions.rootDir &&
-            tss.makeAbsolute(compilerOptions.rootDir, currentDirectory)) ||
+            makeAbsolute(compilerOptions.rootDir, currentDirectory)) ||
         (compilerOptions.baseUrl &&
-            tss.makeAbsolute(compilerOptions.baseUrl, currentDirectory)) ||
-        tss.normalizePath(tss.Program.getCommonSourceDirectory(program))
+            makeAbsolute(compilerOptions.baseUrl, currentDirectory)) ||
+        normalizePath(Program.getCommonSourceDirectory(program))
 
     const outDir =
         (compilerOptions.outDir &&
-            tss.makeAbsolute(compilerOptions.outDir, currentDirectory)) ||
+            makeAbsolute(compilerOptions.outDir, currentDirectory)) ||
         rootDir
 
     const emitter = new Emitter(out, projectRoot, packageJson)
