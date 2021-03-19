@@ -47,9 +47,9 @@ export class Emitter {
         this.packageData = new Map()
     }
 
-    public emit<T extends Vertex | Edge>(element: T): T {
+    public emit<T extends Vertex | Edge>(element: Omit<T, 'id'>): T {
         const id: T['id'] = this.id++
-        const elementWithId: T = { ...element, id }
+        const elementWithId = { ...element, id } as T
 
         const buffer = Buffer.from(
             JSON.stringify(elementWithId, undefined, 0) + os.EOL,
@@ -182,7 +182,6 @@ export class Emitter {
 
     private createPackageData(packageJson: PackageJson): PackageInformation {
         return this.emit<PackageInformation>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.packageInformation,
             name: packageJson.name,
@@ -200,7 +199,6 @@ export class Emitter {
         packageInformationId: Id
     ): Moniker {
         const npmMoniker = this.emit<Moniker>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.moniker,
             kind,
@@ -209,7 +207,6 @@ export class Emitter {
         })
 
         this.emit<packageInformation>({
-            id: -1, // TODO
             type: ElementTypes.edge,
             label: EdgeLabels.packageInformation,
             outV: npmMoniker.id,

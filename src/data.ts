@@ -50,7 +50,6 @@ export class DocumentData {
     public end(): void {
         if (this.ranges.length > 0) {
             this.emitter.emit<contains>({
-                id: -1, // TODO
                 type: ElementTypes.edge,
                 label: EdgeLabels.contains,
                 outV: this.document.id,
@@ -119,7 +118,6 @@ export class SymbolData {
         recordAsReference = true
     ): void {
         this.emitter.emit<next>({
-            id: -1, // TODO
             type: ElementTypes.edge,
             label: EdgeLabels.next,
             outV: definition.id,
@@ -156,7 +154,6 @@ export class SymbolData {
             case VertexLabels.range:
                 if (property) {
                     this.emitter.emit<next>({
-                        id: -1, // TODO
                         type: ElementTypes.edge,
                         label: EdgeLabels.next,
                         outV: reference.id,
@@ -177,14 +174,12 @@ export class SymbolData {
 
     public addHover(hover: lsp.Hover): void {
         const hoverResult = this.emitter.emit<HoverResult>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.hoverResult,
             result: hover,
         })
 
         this.emitter.emit<textDocument_hover>({
-            id: -1, // TODO
             type: ElementTypes.edge,
             label: EdgeLabels.textDocument_hover,
             outV: this.resultSet.id,
@@ -194,7 +189,6 @@ export class SymbolData {
 
     public addMoniker(moniker: Moniker): void {
         this.emitter.emit<moniker>({
-            id: -1, // TODO
             type: ElementTypes.edge,
             label: EdgeLabels.moniker,
             outV: this.resultSet.id,
@@ -207,7 +201,6 @@ export class SymbolData {
             const definitionResult = this.getOrCreateDefinitionResult()
 
             this.emitter.emit<item>({
-                id: -1, // TODO
                 type: ElementTypes.edge,
                 label: EdgeLabels.item,
                 outV: definitionResult.id,
@@ -221,7 +214,6 @@ export class SymbolData {
 
             for (const [property, values] of this.referenceRanges.entries()) {
                 this.emitter.emit<item>({
-                    id: -1, //
                     type: ElementTypes.edge,
                     label: EdgeLabels.item,
                     outV: referenceResult.id,
@@ -236,7 +228,6 @@ export class SymbolData {
             const referenceResult = this.getOrCreateReferenceResult()
 
             this.emitter.emit<item>({
-                id: -1, // TODO
                 type: ElementTypes.edge,
                 label: EdgeLabels.item,
                 outV: referenceResult.id,
@@ -249,13 +240,11 @@ export class SymbolData {
 
     public getOrCreateDefinitionResult(): DefinitionResult {
         const definitionResult = this.emitter.emit<DefinitionResult>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.definitionResult,
         })
 
         this.emitter.emit<textDocument_definition>({
-            id: -1, // TODO
             type: ElementTypes.edge,
             label: EdgeLabels.textDocument_definition,
             outV: this.resultSet.id,
@@ -267,13 +256,11 @@ export class SymbolData {
 
     public getOrCreateReferenceResult(): ReferenceResult {
         const referenceResult = this.emitter.emit<ReferenceResult>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.referenceResult,
         })
 
         this.emitter.emit<textDocument_references>({
-            id: -1, // TODO
             type: ElementTypes.edge,
             label: EdgeLabels.textDocument_references,
             outV: this.resultSet.id,
@@ -299,7 +286,6 @@ export class AliasSymbolData extends SymbolData {
         super.begin()
 
         this.emitter.emit<next>({
-            id: -1, // TODO
             type: ElementTypes.edge,
             label: EdgeLabels.next,
             outV: this.resultSet.id,
@@ -316,7 +302,6 @@ export class AliasSymbolData extends SymbolData {
             super.addDefinition(sourceFile, definition, false)
         } else {
             this.emitter.emit<next>({
-                id: -1, // TODO
                 type: ElementTypes.edge,
                 label: EdgeLabels.next,
                 outV: definition.id,
@@ -337,7 +322,6 @@ export class AliasSymbolData extends SymbolData {
     ): void {
         if (reference.label === VertexLabels.range) {
             this.emitter.emit<next>({
-                id: -1, // TODO
                 type: ElementTypes.edge,
                 label: EdgeLabels.next,
                 outV: reference.id,
@@ -400,7 +384,6 @@ export class MethodSymbolData extends SymbolData {
 
         if (reference.label === 'range') {
             this.emitter.emit<next>({
-                id: -1, // TODO
                 type: ElementTypes.edge,
                 label: EdgeLabels.next,
                 outV: reference.id,

@@ -133,7 +133,6 @@ export class Indexer {
 
     public index(): void {
         this.emitter.emit<MetaData>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.metaData,
             version,
@@ -143,7 +142,6 @@ export class Indexer {
         })
 
         const project = this.emitter.emit<Project>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.project,
             kind: 'typescript',
@@ -172,7 +170,6 @@ export class Indexer {
         }
 
         this.emitter.emit<contains>({
-            id: -1, // TODO
             type: ElementTypes.edge,
             label: EdgeLabels.contains,
             outV: project.id,
@@ -409,7 +406,6 @@ export class Indexer {
         }
 
         const referenceRange = this.emitter.emit<ReferenceRange>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.range,
             ...rangeFromNode(this.currentSourceFile, node),
@@ -488,7 +484,6 @@ export class Indexer {
         }
 
         const document = this.emitter.emit<Document>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.document,
             uri: URI.file(makeAbsolute(sourceFile.fileName)).toString(true),
@@ -614,7 +609,6 @@ export class Indexer {
         const document = this.currentDocumentData.document
         const sourceFile = this.currentSourceFile
         const resultSet = this.emitter.emit<ResultSet>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.resultSet,
         })
@@ -700,7 +694,6 @@ export class Indexer {
         const sourceFile = declaration.getSourceFile()
         const documentData = this.getOrCreateDocumentData(sourceFile)
         const definitionRange = this.emitter.emit<DefinitionRange>({
-            id: -1, // TODO
             type: ElementTypes.vertex,
             label: VertexLabels.range,
             ...(ts.isSourceFile(declaration)
