@@ -1,16 +1,8 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
-// In typescript all paths are /. So use the posix layer only
-
 import ts from 'typescript-lsif'
 import LRUCache from 'lru-cache'
 import * as tss from './typescripts'
 
-interface Disposable {
-    (): void
-}
+type Disposable = () => void
 
 enum LocationKind {
     tsLibrary = 1,

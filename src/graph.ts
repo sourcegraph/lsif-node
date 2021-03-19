@@ -1,9 +1,3 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
-'use strict'
-
 import { URI } from 'vscode-uri'
 
 import {
@@ -509,7 +503,7 @@ export class EdgeBuilder {
     ): item {
         let result: item
         if (to.length === 0) {
-            let result: item = {
+            const result: item = {
                 id: this.nextId(),
                 type: ElementTypes.edge,
                 label: EdgeLabels.item,
@@ -525,7 +519,7 @@ export class EdgeBuilder {
             }
             return result
         }
-        let toKind = to[0].label
+        const toKind = to[0].label
         result = {
             id: this.nextId(),
             type: ElementTypes.edge,

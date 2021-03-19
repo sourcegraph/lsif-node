@@ -1,8 +1,9 @@
 import * as fs from 'fs'
-import PackageJson from './package'
+import * as path from 'path'
+import { readPackageJson, PackageJson } from './package'
 import * as os from 'os'
 import { EdgeBuilder, VertexBuilder } from './graph'
-import * as path from 'path'
+import * as tss from './typescripts'
 import {
     Edge,
     Vertex,
@@ -15,6 +16,23 @@ import {
     VertexLabels,
     MonikerKind,
 } from 'lsif-protocol'
+import * as Is from './util'
+
+const sanitizeMonikerPath = (packageJson: PackageJson, path: string): string =>
+    path !== packageJson.main && path !== packageJson.typings ? '' : path
+
+const createMoniker = (
+    packageJson: PackageJson,
+    moniker: { name: string; path?: string }
+): string => {
+    const path = sanitizeMonikerPath(packageJson, moniker.path || '')
+    return [packageJson.name, path.replace(/:/g, '::'), moniker.name].join(':')
+}
+
+interface PackageDataPair {
+    packageInfo: PackageInformation
+    packageJson: PackageJson
+}
 
 export class Emitter {
     private _id = 0
@@ -23,10 +41,7 @@ export class Emitter {
     private _edge: EdgeBuilder
 
     private packageInformation: PackageInformation | undefined
-    private packageData: Map<
-        string,
-        { packageInfo: PackageInformation; packageJson: PackageJson } | null
-    >
+    private packageData: Map<string, PackageDataPair | null>
 
     public constructor(
         filename: string,
@@ -51,130 +66,6 @@ export class Emitter {
         return this._edge
     }
 
-    public handleImportMoniker(identifier: string): Moniker | undefined {
-        const tscMoniker = TscMoniker.parse(identifier)
-        if (!TscMoniker.hasPath(tscMoniker)) {
-            return undefined
-        }
-        let parts = tscMoniker.path.split('/')
-        let packagePath: string | undefined
-        let monikerPath: string | undefined
-        for (let i = parts.length - 1; i >= 0; i--) {
-            let part = parts[i]
-            if (part === 'node_modules') {
-                // End is exclusive and one for the name
-                const packageIndex = i + (parts[i + 1].startsWith('@') ? 3 : 2)
-                packagePath = path.join(
-                    this.projectRoot,
-                    ...parts.slice(0, packageIndex),
-                    `package.json`
-                )
-                monikerPath = parts.slice(packageIndex).join('/')
-                break
-            }
-        }
-        if (
-            packagePath === undefined ||
-            (monikerPath !== undefined && monikerPath.length === 0)
-        ) {
-            return undefined
-        }
-        let packageData = this.packageData.get(packagePath)
-        if (packageData === undefined) {
-            let packageJson = PackageJson.read(packagePath)
-            if (packageJson === undefined) {
-                this.packageData.set(packagePath, null)
-            } else {
-                packageData = {
-                    packageInfo: this.createPackageInformation(packageJson),
-                    packageJson: packageJson,
-                }
-                this.emit(packageData.packageInfo)
-                this.packageData.set(packagePath, packageData)
-            }
-        }
-        if (packageData !== null && packageData !== undefined) {
-            let npmIdentifier: string
-            if (
-                packageData.packageJson.typings === monikerPath ||
-                packageData.packageJson.main === monikerPath
-            ) {
-                npmIdentifier = NpmMoniker.create(
-                    packageData.packageJson.name,
-                    undefined,
-                    tscMoniker.name
-                )
-            } else {
-                npmIdentifier = NpmMoniker.create(
-                    packageData.packageJson.name,
-                    monikerPath,
-                    tscMoniker.name
-                )
-            }
-            let npmMoniker = this.createMoniker(
-                npmIdentifier,
-                MonikerKind.import,
-                NpmMoniker.scheme
-            )
-            this.emit(npmMoniker)
-            this.emit(
-                this.createPackageInformationEdge(
-                    npmMoniker.id,
-                    packageData.packageInfo.id
-                )
-            )
-            return npmMoniker
-        }
-
-        return undefined
-    }
-
-    public handleExportMoniker(identifier: string): Moniker | undefined {
-        if (!this.packageJson) {
-            return undefined
-        }
-
-        let tscMoniker: TscMoniker = TscMoniker.parse(identifier)
-        if (
-            TscMoniker.hasPath(tscMoniker) &&
-            this.isPackaged(path.join(this.projectRoot, tscMoniker.path))
-        ) {
-            this.ensurePackageInformation()
-            let npmIdentifier: string
-            if (
-                this.packageJson.main === tscMoniker.path ||
-                this.packageJson.typings === tscMoniker.path
-            ) {
-                npmIdentifier = NpmMoniker.create(
-                    this.packageJson.name,
-                    undefined,
-                    tscMoniker.name
-                )
-            } else {
-                npmIdentifier = NpmMoniker.create(
-                    this.packageJson.name,
-                    tscMoniker.path,
-                    tscMoniker.name
-                )
-            }
-            let npmMoniker = this.createMoniker(
-                npmIdentifier,
-                MonikerKind.export,
-                NpmMoniker.scheme
-            )
-            this.emit(npmMoniker)
-            this.emit(
-                this.createPackageInformationEdge(
-                    npmMoniker.id,
-                    this.packageInformation!.id
-                )
-            )
-            return npmMoniker
-        }
-
-        return undefined
-    }
-
     public emit(element: Vertex | Edge): void {
         const buffer = Buffer.from(
             JSON.stringify(element, undefined, 0) + os.EOL,
@@ -187,134 +78,173 @@ export class Emitter {
         }
     }
 
-    private isPackaged(uri: string): boolean {
+    public handleImportMoniker(
+        xpath: string,
+        symbol?: string
+    ): Moniker | undefined {
+        const tscMoniker = tss.parseIdentifier(xpath, symbol)
+        if (!tscMoniker.path) {
+            return undefined
+        }
+
+        const { packagePath, monikerPath } = this.getMonikerPaths(
+            tscMoniker.path
+        )
+        if (!packagePath || !monikerPath || monikerPath.length === 0) {
+            return undefined
+        }
+
+        const packageData = this.getOrCreatePackageData(packagePath)
+        if (!packageData) {
+            return undefined
+        }
+
+        return this.emitMoniker(
+            createMoniker(packageData.packageJson, tscMoniker),
+            MonikerKind.import,
+            packageData.packageInfo.id
+        )
+    }
+
+    public handleExportMoniker(
+        path: string,
+        symbol?: string
+    ): Moniker | undefined {
+        const tscMoniker = tss.parseIdentifier(path, symbol)
+        if (!tscMoniker.path) {
+            return undefined
+        }
+
+        const packageInformation = this.ensurePackageInformation()
+        if (!this.packageJson || !packageInformation) {
+            return undefined
+        }
+
+        // Note from original msft/lsif-node/tsc implementation:
+        //
         // This needs to consult the .npmignore file and checks if the
         // document is actually published via npm. For now we return
         // true for all documents.
-        return true
+        // const uri = path.join(this.projectRoot, tscMoniker.path)
+
+        return this.emitMoniker(
+            createMoniker(this.packageJson, tscMoniker),
+            MonikerKind.export,
+            packageInformation.id
+        )
     }
 
-    private ensurePackageInformation(): void {
-        if (this.packageJson && this.packageInformation === undefined) {
-            this.packageInformation = this.createPackageInformation(
-                this.packageJson
-            )
-            this.emit(this.packageInformation)
+    private getMonikerPaths(
+        identifier: string
+    ): {
+        packagePath?: string
+        monikerPath?: string
+    } {
+        //
+        // TODO - clean this up
+        //
+
+        const parts = identifier.split('/')
+        for (let i = parts.length - 1; i >= 0; i--) {
+            if (parts[i] !== 'node_modules') {
+                continue
+            }
+
+            // End is exclusive and one for the name
+            const packageIndex = i + (parts[i + 1].startsWith('@') ? 3 : 2)
+
+            return {
+                packagePath: path.join(
+                    this.projectRoot,
+                    ...parts.slice(0, packageIndex),
+                    `package.json`
+                ),
+                monikerPath: parts.slice(packageIndex).join('/'),
+            }
         }
+
+        return { packagePath: undefined, monikerPath: undefined }
     }
 
-    private createPackageInformation(
-        packageJson: PackageJson
-    ): PackageInformation {
-        let result: PackageInformation = {
+    private getOrCreatePackageData(
+        packagePath: string
+    ): PackageDataPair | undefined {
+        const cachedPackageData = this.packageData.get(packagePath)
+        if (cachedPackageData) {
+            return cachedPackageData || undefined
+        }
+
+        const packageJson = readPackageJson(packagePath)
+        const packageData = packageJson
+            ? { packageInfo: this.createPackageData(packageJson), packageJson }
+            : null
+        this.packageData.set(packagePath, packageData)
+        return packageData || undefined
+    }
+
+    private createPackageData(packageJson: PackageJson): PackageInformation {
+        const repositoryFields = Is.string(packageJson.repository?.url)
+            ? { repository: packageJson.repository }
+            : {}
+
+        const packageInfo: PackageInformation = {
             id: this.nextId(),
             type: ElementTypes.vertex,
             label: VertexLabels.packageInformation,
             name: packageJson.name,
             manager: 'npm',
             version: packageJson.version,
+            ...repositoryFields,
         }
-        if (packageJson.hasRepository()) {
-            result.repository = packageJson.repository
-        }
-        return result
+
+        this.emit(packageInfo)
+        return packageInfo
     }
 
-    private createMoniker(
+    private ensurePackageInformation(): PackageInformation | undefined {
+        if (!this.packageJson || this.packageInformation !== undefined) {
+            return this.packageInformation
+        }
+
+        this.packageInformation = {
+            id: this.nextId(),
+            type: ElementTypes.vertex,
+            label: VertexLabels.packageInformation,
+            name: this.packageJson.name,
+            manager: 'npm',
+            version: this.packageJson.version,
+            ...(Is.string(this.packageJson.repository?.url)
+                ? { repository: this.packageJson.repository }
+                : {}),
+        }
+
+        this.emit(this.packageInformation)
+        return this.packageInformation
+    }
+
+    private emitMoniker(
         identifier: string,
         kind: MonikerKind,
-        scheme: string
+        packageInformationId: Id
     ): Moniker {
-        return {
+        const npmMoniker: Moniker = {
             id: this.nextId(),
             type: ElementTypes.vertex,
             label: VertexLabels.moniker,
             kind,
-            scheme,
+            scheme: 'npm',
             identifier,
         }
-    }
-
-    // private createNextMonikerEdge(outV: Id, inV: Id): nextMoniker {
-    //     return {
-    //         id: this.nextId(),
-    //         type: ElementTypes.edge,
-    //         label: EdgeLabels.nextMoniker,
-    //         outV,
-    //         inV,
-    //     }
-    // }
-
-    private createPackageInformationEdge(
-        outV: Id,
-        inV: Id
-    ): packageInformation {
-        return {
+        const packageInformation: packageInformation = {
             id: this.nextId(),
             type: ElementTypes.edge,
             label: EdgeLabels.packageInformation,
-            outV,
-            inV,
+            outV: npmMoniker.id,
+            inV: packageInformationId,
         }
+
+        this.emit(npmMoniker)
+        this.emit(packageInformation)
+        return npmMoniker
     }
-}
-
-export const separator: string = ':'
-
-export interface TscMoniker {
-    /**
-     * The symbol name of the moniker.
-     */
-    name: string
-
-    /**
-     * The path of the moniker;
-     */
-    path?: string
-}
-
-export namespace TscMoniker {
-    export const scheme: string = 'tsc'
-
-    export function parse(identifier: string): TscMoniker {
-        let index = identifier.lastIndexOf(separator)
-        if (index === -1) {
-            return { name: identifier }
-        }
-        return {
-            name: identifier.substring(index + 1),
-            path: identifier.substr(0, index).replace(/::/g, ':'),
-        }
-    }
-
-    export function create(name: string, path?: string): string {
-        if (!path) {
-            return name
-        }
-        return `${escape(path)}${separator}${name}`
-    }
-
-    export function hasPath(
-        moniker: TscMoniker
-    ): moniker is TscMoniker & { path: string } {
-        return !!moniker.path
-    }
-}
-
-export namespace NpmMoniker {
-    export const scheme: string = 'npm'
-
-    export function create(
-        module: string,
-        path: string | undefined,
-        name: string
-    ): string {
-        return `${module}${separator}${
-            path !== undefined ? escape(path) : ''
-        }${separator}${name}`
-    }
-}
-
-function escape(value: string): string {
-    return value.replace(/:/g, '::')
 }

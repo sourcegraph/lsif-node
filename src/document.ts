@@ -6,7 +6,13 @@ export class DocumentData {
 
     public constructor(
         private emitter: Emitter,
+
+        //
+        // TODO - why public?
         public document: Document,
+
+        //
+        // TODO - what are we doing with these?
         public externalLibrary: boolean,
         public monikerPath?: string
     ) {}

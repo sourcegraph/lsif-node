@@ -1,15 +1,7 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
-'use strict'
-
 import * as path from 'path'
 import * as crypto from 'crypto'
-
 import ts from 'typescript-lsif'
-
-import * as Is from './is'
+import * as Is from './util'
 
 export type Declaration =
     | ts.ModuleDeclaration
@@ -118,6 +110,21 @@ export function createMonikerIdentifier(
     return `${path.replace(/\:/g, '::')}:${symbol}`
 }
 
+export function parseIdentifier(
+    path: string,
+    symbol?: string
+): { name: string; path?: string } {
+    const identifier = createMonikerIdentifier(path, symbol)
+    const index = identifier.lastIndexOf(':')
+    if (index === -1) {
+        return { name: identifier }
+    }
+    return {
+        name: identifier.substring(index + 1),
+        path: identifier.substr(0, index).replace(/::/g, ':'),
+    }
+}
+
 export function makeRelative(from: string, to: string): string {
     return path.posix.relative(from, to)
 }
@@ -155,7 +162,7 @@ export function flattenDiagnosticMessageText(
     return result
 }
 
-interface InternalSymbol extends ts.Symbol {
+export interface InternalSymbol extends ts.Symbol {
     parent?: ts.Symbol
     containingType?: ts.UnionOrIntersectionType
     __symbol__data__key__: string | undefined

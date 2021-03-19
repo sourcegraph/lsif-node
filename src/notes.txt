@@ -1,4 +1,0 @@
-# Deficiencies
-
-- shouldInferTypings is now acquire typings?
-- does not handle published packages (see msft/lsif-node/tsc)

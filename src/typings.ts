@@ -1,8 +1,3 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
-
 import { promisify } from 'util'
 import * as path from 'path'
 import * as _fs from 'fs'
@@ -21,15 +16,13 @@ interface Dictionary<T> {
     [key: string]: T
 }
 
-interface CommandCallback {
-    (
-        err?: Error,
-        result?: any,
-        result2?: any,
-        result3?: any,
-        result4?: any
-    ): void
-}
+type CommandCallback = (
+    err?: Error,
+    result?: any,
+    result2?: any,
+    result3?: any,
+    result4?: any
+) => void
 
 interface ViewSignature {
     (args: string[], callback: CommandCallback): void

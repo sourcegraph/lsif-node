@@ -5,15 +5,11 @@ import {
     RangeTagTypes,
     ReferenceTag,
 } from 'lsif-protocol'
-import ts from 'typescript-lsif'
+import ts, { ExportAssignment, ExportDeclaration } from 'typescript-lsif'
 import { URI } from 'vscode-uri'
 import { Symbols } from './lsif'
 import * as tss from './typescripts'
 import { DocumentData } from './document'
-import { getHover } from './hover'
-import { PathContext } from './paths'
-import { ProgramContext } from './program'
-import { phantomRange, rangeFromNode } from './ranges'
 import {
     AliasSymbolData,
     MethodSymbolData,
@@ -24,6 +20,59 @@ import {
 import { Emitter } from './writer'
 
 export const version = '0.0.1'
+const phantomPosition = { line: 0, character: 0 }
+const phantomRange = { start: phantomPosition, end: phantomPosition }
+
+const rangeFromNode = (
+    file: ts.SourceFile,
+    node: ts.Node,
+    includeJsDocComment?: boolean
+): lsp.Range => ({
+    start:
+        file === node
+            ? phantomPosition
+            : file.getLineAndCharacterOfPosition(
+                  node.getStart(file, includeJsDocComment)
+              ),
+    end: file.getLineAndCharacterOfPosition(node.getEnd()),
+})
+
+const joinTexts = (parts: { text: string }[] | undefined): string =>
+    (parts || []).map((part) => part.text).join('')
+
+// To get around deprecation
+type MarkedString = string | { language: string; value: string }
+
+const getHover = (
+    languageService: ts.LanguageService,
+    node: ts.DeclarationName,
+    sourceFile: ts.SourceFile = node.getSourceFile()
+): lsp.Hover | undefined => {
+    try {
+        const quickInfo = languageService.getQuickInfoAtPosition(
+            node,
+            sourceFile
+        )
+        if (quickInfo !== undefined) {
+            const contents: MarkedString[] = []
+            if (quickInfo.displayParts) {
+                contents.push({
+                    language: 'typescript',
+                    value: joinTexts(quickInfo.displayParts),
+                })
+            }
+            if (quickInfo.documentation && quickInfo.documentation.length > 0) {
+                contents.push(joinTexts(quickInfo.documentation))
+            }
+
+            return { contents }
+        }
+    } catch (err) {
+        // fallthrough
+    }
+
+    return undefined
+}
 
 const symbolKindMap: Map<number, lsp.SymbolKind> = new Map<
     number,
@@ -45,19 +94,21 @@ export class Indexer {
 
     public constructor(
         private emitter: Emitter,
-        private programContext: ProgramContext,
-        private pathContext: PathContext
+        private languageService: ts.LanguageService,
+        private program: ts.Program,
+        private typeChecker: ts.TypeChecker,
+        private projectRoot: string,
+        private rootDir: string,
+        private outDir: string,
+        private repositoryRoot: string
     ) {
-        this.symbols = new Symbols(
-            this.programContext.program,
-            this.programContext.typeChecker
-        )
+        this.symbols = new Symbols(this.program, this.typeChecker)
     }
 
     public index(): void {
         const metadata = this.emitter.vertex.metaData(
             version,
-            URI.file(this.pathContext.repositoryRoot).toString(true),
+            URI.file(this.repositoryRoot).toString(true),
             { name: 'lsif-tsc', args: ts.sys.args, version }
         )
         this.emitter.emit(metadata)
@@ -65,14 +116,14 @@ export class Indexer {
         const project = this.emitter.vertex.project()
         this.emitter.emit(project)
 
-        for (const sourceFile of this.programContext.program.getSourceFiles()) {
+        for (const sourceFile of this.program.getSourceFiles()) {
             if (
                 tss.Program.isSourceFileDefaultLibrary(
-                    this.programContext.program,
+                    this.program,
                     sourceFile
                 ) ||
                 tss.Program.isSourceFileFromExternalLibrary(
-                    this.programContext.program,
+                    this.program,
                     sourceFile
                 )
             ) {
@@ -147,98 +198,172 @@ export class Indexer {
     }
 
     private postVisit(node: ts.Node): void {
-        if (node.kind === ts.SyntaxKind.SourceFile) {
-            this.currentSourceFile = undefined
-            this.currentDocumentData = undefined
+        switch (node.kind) {
+            case ts.SyntaxKind.SourceFile:
+                this.currentSourceFile = undefined
+                this.currentDocumentData = undefined
+                break
+
+            // export = foo
+            // export default foo
+            case ts.SyntaxKind.ExportAssignment:
+                if (!this.currentDocumentData) {
+                    throw new Error('Illegal statement context')
+                }
+                const assignmentNode = node as ExportAssignment
+
+                const symbol = this.getSymbolAtLocation(node)
+                if (symbol === undefined) {
+                    return
+                }
+                this.getOrCreateSymbolData(symbol)
+
+                const monikerPath = this.currentDocumentData.monikerPath
+                if (monikerPath === undefined) {
+                    return
+                }
+
+                const aliasedSymbol = this.getSymbolAtLocation(
+                    assignmentNode.expression
+                )
+                if (aliasedSymbol === undefined) {
+                    return
+                }
+
+                // TODO
+                // const aliasedSymbolData = this.getOrCreateSymbolData(aliasedSymbol)
+                // aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported)
+
+                this.exportSymbol(
+                    aliasedSymbol,
+                    monikerPath,
+                    this.getExportSymbolName(symbol),
+                    this.currentSourceFile
+                )
+                break
+
+            // 	// `export { foo }` ==> ExportDeclaration
+            // 	// `export { _foo as foo }` ==> ExportDeclaration
+            case ts.SyntaxKind.ExportDeclaration:
+                if (!this.currentDocumentData) {
+                    throw new Error('Illegal statement context')
+                }
+                const declarationNode = node as ExportDeclaration
+
+                if (
+                    declarationNode.exportClause !== undefined &&
+                    ts.isNamedExports(declarationNode.exportClause)
+                ) {
+                    for (const element of declarationNode.exportClause
+                        .elements) {
+                        const symbol = this.getSymbolAtLocation(element.name)
+                        if (symbol === undefined) {
+                            continue
+                        }
+
+                        // TODO - move condition out
+                        const monikerPath = this.currentDocumentData.monikerPath
+                        if (monikerPath === undefined) {
+                            return
+                        }
+                        // Make sure we have a symbol data;
+                        this.getOrCreateSymbolData(symbol)
+                        const aliasedSymbol =
+                            (symbol.getFlags() & ts.SymbolFlags.Alias) !== 0
+                                ? this.typeChecker.getAliasedSymbol(symbol)
+                                : element.propertyName !== undefined
+                                ? this.getSymbolAtLocation(element.propertyName)
+                                : undefined
+                        if (aliasedSymbol === undefined) {
+                            continue
+                        }
+                        // TODO
+                        // const aliasedSymbolData = this.getOrCreateSymbolData(aliasedSymbol);
+                        // aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+                        this.exportSymbol(
+                            aliasedSymbol,
+                            monikerPath,
+                            this.getExportSymbolName(symbol),
+                            this.currentSourceFile
+                        )
+                    }
+                } else if (declarationNode.moduleSpecifier !== undefined) {
+                    const symbol = this.getSymbolAtLocation(declarationNode)
+                    if (
+                        symbol === undefined ||
+                        (symbol.getFlags() & ts.SymbolFlags.ExportStar) === 0
+                    ) {
+                        return
+                    }
+
+                    const monikerPath = this.currentDocumentData.monikerPath
+                    if (monikerPath === undefined) {
+                        return
+                    }
+                    this.getOrCreateSymbolData(symbol)
+                    const aliasedSymbol = this.getSymbolAtLocation(
+                        declarationNode.moduleSpecifier
+                    )
+                    if (
+                        aliasedSymbol === undefined ||
+                        !tss.isSourceFile(aliasedSymbol)
+                    ) {
+                        return
+                    }
+                    this.getOrCreateSymbolData(aliasedSymbol)
+                    this.exportSymbol(
+                        aliasedSymbol,
+                        monikerPath,
+                        '',
+                        this.currentSourceFile
+                    )
+                }
+                break
         }
     }
 
     //
-    // NEW
+    // TODO - work on these
 
-    // private endVisitExportAssignment(node: ts.ExportAssignment): void {
-    // 	// export = foo;
-    // 	// export default foo;
-    // 	const symbol = this.tsProject.getSymbolAtLocation(node);
-    // 	if (symbol === undefined) {
-    // 		return;
-    // 	}
-    // 	// Make sure we have a symbol data;
-    // 	this.dataManager.getOrCreateSymbolData(symbol);
-    // 	const monikerPath = this.currentDocumentData.monikerPath;
-    // 	if (monikerPath === undefined) {
-    // 		return;
-    // 	}
-    // 	const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.expression);
-    // 	if (aliasedSymbol === undefined) {
-    // 		return;
-    // 	}
-    // 	const aliasedSymbolData = this.dataManager.getOrCreateSymbolData(aliasedSymbol);
-    // 	if (aliasedSymbolData === undefined) {
-    // 		return;
-    // 	}
-    // 	aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-    // 	this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
-    // }
+    private getSymbolAtLocation(node: ts.Node): ts.Symbol | undefined {
+        let result = this.typeChecker.getSymbolAtLocation(node)
+        if (result === undefined) {
+            result = tss.getSymbolFromNode(node)
+        }
+        return result
+    }
+
+    private exportSymbol(
+        symbol: ts.Symbol,
+        monikerPath: string,
+        newName: string | undefined,
+        locationNode: ts.Node | undefined
+    ): void {
+        // TODO
+        // const walker = new ExportSymbolWalker(this.context, this.symbols, locationNode, true);
+        // const result = walker.walk(symbol, newName ?? symbol.escapedName as string);
+        // this.emitAttachedMonikers(monikerPath, result);
+    }
+
+    private getExportSymbolName(symbol: ts.Symbol): string {
+        let escapedName = symbol.getEscapedName() as string
+        if (escapedName.charAt(0) === '"' || escapedName.charAt(0) === "'") {
+            escapedName = escapedName.substr(1, escapedName.length - 2)
+        }
+        // We use `.`as a path separator so escape `.` into `..`
+        escapedName = escapedName.replace(new RegExp('\\.', 'g'), '..')
+        return escapedName
+    }
 
     //
-    // NEW
-
-    // private endVisitExportDeclaration(node: ts.ExportDeclaration): void {
-    // 	// `export { foo }` ==> ExportDeclaration
-    // 	// `export { _foo as foo }` ==> ExportDeclaration
-    // 	if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
-    // 		for (const element of node.exportClause.elements) {
-    // 			const symbol = this.tsProject.getSymbolAtLocation(element.name);
-    // 			if (symbol === undefined) {
-    // 				continue;
-    // 			}
-    // 			const monikerPath = this.currentDocumentData.monikerPath;
-    // 			if (monikerPath === undefined) {
-    // 				return;
-    // 			}
-    // 			// Make sure we have a symbol data;
-    // 			this.dataManager.getOrCreateSymbolData(symbol);
-    // 			const aliasedSymbol = Symbols.isAliasSymbol(symbol)
-    // 				? this.tsProject.getAliasedSymbol(symbol)
-    // 				: element.propertyName !== undefined
-    // 					? this.tsProject.getSymbolAtLocation(element.propertyName)
-    // 					: undefined;
-    // 			if (aliasedSymbol === undefined) {
-    // 				continue;
-    // 			}
-    // 			const aliasedSymbolData = this.dataManager.getOrCreateSymbolData(aliasedSymbol);
-    // 			if (aliasedSymbolData === undefined) {
-    // 				return;
-    // 			}
-    // 			aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-    // 			this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
-    // 		}
-    // 	} else if (node.moduleSpecifier !== undefined) {
-    // 		const symbol = this.tsProject.getSymbolAtLocation(node);
-    // 		if (symbol === undefined || !Symbols.isExportStar(symbol)) {
-    // 			return;
-    // 		}
-    // 		const monikerPath = this.currentDocumentData.monikerPath;
-    // 		if (monikerPath === undefined) {
-    // 			return;
-    // 		}
-    // 		this.dataManager.getOrCreateSymbolData(symbol);
-    // 		const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.moduleSpecifier);
-    // 		if (aliasedSymbol === undefined || !Symbols.isSourceFile(aliasedSymbol)) {
-    // 			return;
-    // 		}
-    // 		this.dataManager.getOrCreateSymbolData(aliasedSymbol);
-    // 		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, '', this.currentSourceFile);
-    // 	}
-    // }
+    //
 
     private visitSymbol(node: ts.Node): void {
         if (!this.currentSourceFile || !this.currentDocumentData) {
             return
         }
 
-        const symbol = this.programContext.typeChecker.getSymbolAtLocation(node)
+        const symbol = this.typeChecker.getSymbolAtLocation(node)
         if (!symbol) {
             return
         }
@@ -329,15 +454,12 @@ export class Indexer {
         const document = this.emitter.vertex.document(sourceFile.fileName)
 
         const externalLibrary = tss.Program.isSourceFileFromExternalLibrary(
-            this.programContext.program,
+            this.program,
             sourceFile
         )
 
         const monikerPath = externalLibrary
-            ? tss.computeMonikerPath(
-                  this.pathContext.projectRoot,
-                  sourceFile.fileName
-              )
+            ? tss.computeMonikerPath(this.projectRoot, sourceFile.fileName)
             : this.computeMonikerPath(sourceFile)
 
         const documentData = new DocumentData(
@@ -355,16 +477,15 @@ export class Indexer {
         // A real source file inside this project.
         if (
             !sourceFile.isDeclarationFile ||
-            (sourceFile.fileName.startsWith(this.pathContext.rootDir) &&
-                sourceFile.fileName.charAt(this.pathContext.rootDir.length) ===
-                    '/')
+            (sourceFile.fileName.startsWith(this.rootDir) &&
+                sourceFile.fileName.charAt(this.rootDir.length) === '/')
         ) {
             return tss.computeMonikerPath(
-                this.pathContext.projectRoot,
+                this.projectRoot,
                 tss.toOutLocation(
                     sourceFile.fileName,
-                    this.pathContext.rootDir,
-                    this.pathContext.outDir
+                    this.rootDir,
+                    this.outDir
                 )
             )
         }
@@ -387,7 +508,7 @@ export class Indexer {
             throw new Error('Illegal symbol context')
         }
 
-        const id = tss.createSymbolKey(this.programContext.typeChecker, symbol)
+        const id = tss.createSymbolKey(this.typeChecker, symbol)
         const cachedSymbolData = this.symbolDatas.get(id)
         if (cachedSymbolData) {
             return cachedSymbolData
@@ -471,11 +592,9 @@ export class Indexer {
         const sourceFile = this.currentSourceFile
 
         if (tss.isTransient(symbol)) {
-            if (
-                tss.isComposite(this.programContext.typeChecker, symbol, node)
-            ) {
+            if (tss.isComposite(this.typeChecker, symbol, node)) {
                 const composites = tss.getCompositeSymbols(
-                    this.programContext.typeChecker,
+                    this.typeChecker,
                     symbol,
                     node
                 )
@@ -503,9 +622,7 @@ export class Indexer {
         }
 
         if (tss.isAliasSymbol(symbol)) {
-            const aliased = this.programContext.typeChecker.getAliasedSymbol(
-                symbol
-            )
+            const aliased = this.typeChecker.getAliasedSymbol(symbol)
             const aliasedSymbolData = this.getOrCreateSymbolData(aliased)
             if (aliasedSymbolData) {
                 return new AliasSymbolData(
@@ -564,7 +681,7 @@ export class Indexer {
         symbolData.addDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))
         if (tss.isNamedDeclaration(declaration)) {
             const hover = getHover(
-                this.programContext.languageService,
+                this.languageService,
                 declaration.name,
                 sourceFile
             )
