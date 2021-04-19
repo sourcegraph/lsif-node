@@ -45,7 +45,7 @@
     "@sourcegraph/tsconfig": "4.0.1",
     "@sourcegraph/tslint-config": "13.4.0",
     "@types/lru-cache": "5.1.0",
-    "@types/minimist": "1.2.0",
+    "@types/minimist": "1.2.1",
     "@types/node": "13.13.48",
     "@types/npm": "2.0.31",
     "@types/uuid": "7.0.0",
