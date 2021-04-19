@@ -278,10 +278,10 @@
   resolved "https://registry.npmjs.org/@types/lru-cache/-/lru-cache-5.1.0.tgz"
   integrity sha512-RaE0B+14ToE4l6UqdarKPnXwVDuigfFv+5j9Dze/Nqr23yyuqdNvzcZi3xB+3Agvi5R4EOgAksfv3lXX4vBt9w==
 
-"@types/minimist@1.2.0":
-  version "1.2.0"
-  resolved "https://registry.npmjs.org/@types/minimist/-/minimist-1.2.0.tgz"
-  integrity sha1-aaI6OtKcrwCX8G7aWbNh7i8GOfY=
+"@types/minimist@1.2.1":
+  version "1.2.1"
+  resolved "https://registry.npmjs.org/@types/minimist/-/minimist-1.2.1.tgz"
+  integrity sha512-fZQQafSREFyuZcdWFAExYjBiCL7AUCdgsk80iO0q4yihYYdcIiH28CcuPTGFgLOCC8RlW49GSQxdHwZP+I7CNg==
 
 "@types/node@*", "@types/node@13.13.48":
   version "13.13.48"
