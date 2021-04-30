@@ -30,6 +30,13 @@ $ lsif-tsc **/*.js --AllowJs --checkJs
 Processed in 51.732s
 ```
 
+The previous command relies on shell expansion to pass a list of filenames to the underlying TypeScript compiler. There is a limit on the number of files that can be passed as a command line argument, so it may be necessary to first dump the project filenames into a temporary file, and load that, as follows:
+
+```
+ls -1 **/*.js > inputs.txt
+lsif-tsc @inputs.txt --AllowJs --checkJs
+```
+
 Use `lsif-tsc --help` for more information.
 
 # Legal Notices
