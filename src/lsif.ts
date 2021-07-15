@@ -126,40 +126,6 @@ namespace Converter {
     }
   }
 
-  export function asFoldingRange(
-    this: void,
-    file: ts.SourceFile,
-    span: ts.OutliningSpan
-  ): lsp.FoldingRange {
-    let kind = getFoldingRangeKind(span)
-    let start = file.getLineAndCharacterOfPosition(span.textSpan.start)
-    let end = file.getLineAndCharacterOfPosition(
-      span.textSpan.start + span.textSpan.length
-    )
-    return {
-      kind,
-      startLine: start.line,
-      startCharacter: start.character,
-      endLine: end.line,
-      endCharacter: end.character,
-    } as lsp.FoldingRange
-  }
-
-  function getFoldingRangeKind(
-    span: ts.OutliningSpan
-  ): lsp.FoldingRangeKind | undefined {
-    switch (span.kind) {
-      case 'comment':
-        return lsp.FoldingRangeKind.Comment
-      case 'region':
-        return lsp.FoldingRangeKind.Region
-      case 'imports':
-        return lsp.FoldingRangeKind.Imports
-      case 'code':
-      default:
-        return undefined
-    }
-  }
 
   const symbolKindMap: Map<number, lsp.SymbolKind> = new Map<
     number,
@@ -302,7 +268,6 @@ class ProjectData extends LSIFData {
 class DocumentData extends LSIFData {
   private ranges: Range[]
   private diagnostics: lsp.Diagnostic[] | undefined
-  private foldingRanges: lsp.FoldingRange[] | undefined
   private documentSymbols: RangeBasedDocumentSymbol[] | undefined
 
   public constructor(
@@ -329,9 +294,6 @@ class DocumentData extends LSIFData {
     this.diagnostics = diagnostics
   }
 
-  public addFoldingRanges(foldingRanges: lsp.FoldingRange[]): void {
-    this.foldingRanges = foldingRanges
-  }
 
   public addDocumentSymbols(documentSymbols: RangeBasedDocumentSymbol[]): void {
     this.documentSymbols = documentSymbols
@@ -345,11 +307,6 @@ class DocumentData extends LSIFData {
       let dr = this.vertex.diagnosticResult(this.diagnostics)
       this.emit(dr)
       this.emit(this.edge.diagnostic(this.document, dr))
-    }
-    if (this.foldingRanges !== undefined) {
-      const fr = this.vertex.foldingRangeResult(this.foldingRanges)
-      this.emit(fr)
-      this.emit(this.edge.foldingRange(this.document, fr))
     }
     if (this.documentSymbols !== undefined) {
       const ds = this.vertex.documentSymbolResult(this.documentSymbols)
@@ -2290,18 +2247,6 @@ class Visitor implements ResolverContext {
     }
     if (diagnostics.length > 0) {
       documentData.addDiagnostics(diagnostics)
-    }
-
-    // Folding ranges
-    let spans = this.languageService.getOutliningSpans(sourceFile as any)
-    if (ts.textSpanEnd.length > 0) {
-      let foldingRanges: lsp.FoldingRange[] = []
-      for (let span of spans) {
-        foldingRanges.push(Converter.asFoldingRange(sourceFile, span))
-      }
-      if (foldingRanges.length > 0) {
-        documentData.addFoldingRanges(foldingRanges)
-      }
     }
 
     // Document symbols.
