@@ -1,72 +1,51 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
-
 import * as fs from 'fs'
+import { string as isString } from './debt'
 
-import * as Is from './is'
-import * as paths from './paths'
-
-class PackageJson {
-  static read(filename: string): PackageJson | undefined {
-    try {
-      if (fs.existsSync(filename)) {
-        let content: PackageJson = new PackageJson(
-          filename,
-          JSON.parse(fs.readFileSync(filename, { encoding: 'utf8' }))
-        )
-        if (Is.string(content.name)) {
-          return content
-        }
-      }
-    } catch {}
-    return undefined
-  }
-
-  public $location: string
-
-  public name: string
-  public main: string
-  public typings: string
-  public version?: string
-  public repository?: {
-    type: string
-    url: string
-  }
-
-  private constructor(location: string, json: any) {
-    this.$location = location
-    this.name = json.name
-    this.version = json.version
-    this.repository = json.repository
-    if (Is.string(json.main)) {
-      this.main = paths.normalizeSeparator(paths.removeExtension(json.main))
-    } else {
-      this.main = 'index'
-    }
-    if (Is.string(json.typings)) {
-      this.typings = paths.normalizeSeparator(
-        paths.removeExtension(json.typings)
-      )
-    } else {
-      this.typings = 'index'
-    }
-  }
-
-  public hasVersion(): this is PackageJson & { version: string } {
-    return Is.string(this.version)
-  }
-
-  public hasRepository(): this is PackageJson & {
-    repository: { type: string; url: string }
-  } {
-    return (
-      this.repository !== undefined &&
-      Is.string(this.repository.url) &&
-      Is.string(this.repository.url)
-    )
-  }
+export interface PackageJson {
+    name: string
+    main: string
+    typings: string
+    version?: string
+    repository?: { type: string; url: string }
 }
 
-export default PackageJson
+const sanitizePath = (value: string): string => {
+    for (const ext of ['.ts', '.js', '.d']) {
+        if (value.endsWith(ext)) {
+            return value.substring(0, value.length - ext.length)
+        }
+    }
+
+    return value.replace(/\\/g, '/')
+}
+
+const readPackageJsonInternal = (filename: string): PackageJson | undefined => {
+    if (!fs.existsSync(filename)) {
+        return undefined
+    }
+
+    const content = fs.readFileSync(filename, { encoding: 'utf8' })
+    const { name, version, repository, main, typings } = JSON.parse(
+        content
+    ) as Partial<PackageJson>
+
+    if (!isString(name)) {
+        return undefined
+    }
+
+    return {
+        name,
+        version,
+        repository,
+        main: sanitizePath(main || 'index'),
+        typings: sanitizePath(typings || 'index'),
+    }
+}
+
+export const readPackageJson = (filename: string): PackageJson | undefined => {
+    try {
+        return readPackageJsonInternal(filename)
+    } catch {
+        return undefined
+    }
+}
