@@ -36,8 +36,6 @@ import {
   textDocument_implementation,
   textDocument_typeDefinition,
   TypeDefinitionResult,
-  FoldingRangeResult,
-  textDocument_foldingRange,
   RangeBasedDocumentSymbol,
   DefinitionTag,
   DefinitionRange,
@@ -228,14 +226,6 @@ export class VertexBuilder {
     }
   }
 
-  public foldingRangeResult(values: lsp.FoldingRange[]): FoldingRangeResult {
-    return {
-      id: this.nextId(),
-      type: ElementTypes.vertex,
-      label: VertexLabels.foldingRangeResult,
-      result: values,
-    }
-  }
 
   public hoverResult(value: lsp.Hover): HoverResult
   public hoverResult(
@@ -403,18 +393,6 @@ export class EdgeBuilder {
     }
   }
 
-  public foldingRange(
-    from: Document,
-    to: FoldingRangeResult
-  ): textDocument_foldingRange {
-    return {
-      id: this.nextId(),
-      type: ElementTypes.edge,
-      label: EdgeLabels.textDocument_foldingRange,
-      outV: from.id,
-      inV: to.id,
-    }
-  }
 
   public diagnostic(
     from: Project | Document,
