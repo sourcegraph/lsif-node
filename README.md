@@ -1,4 +1,4 @@
-# TypeScript LSIF indexer ![](https://img.shields.io/badge/status-beta-orange?style=flat)
+# TypeScript LSIF indexer ![Beta](https://img.shields.io/badge/status-beta-orange?style=flat)
 
 Visit https://lsif.dev/ to learn about LSIF.
 
