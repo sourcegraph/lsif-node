@@ -1,15 +1,13 @@
-FROM sourcegraph/src-cli:3.16.1@sha256:b5dd688d25557eaa5fb0ec33cf2cc15a87bc72a7f5d9efa6d5e461644e93ac09 AS src-cli
+FROM sourcegraph/src-cli:3.30.4@sha256:76ee253f9ba6ed1a8fdc46ab1e3f333ea0813841d34feb1aa9b8b57edce4eaab AS src-cli
 
-FROM node:14.5-alpine3.10@sha256:7fb1e608dc4081c25930db83cb4a5df884b6a3f6e4e9f5fa2df08f22778fcfad
+FROM node:14.17.4-alpine3.14@sha256:60a5e65ced8bad91a4c57c05a474baa01182b2b773eb50380e4a90ad4b3e6358
 
 ENV NODE_OPTIONS=--max-old-space-size=4096
 
-RUN apk add --no-cache git bash curl ca-certificates python3 make libstdc++ libgcc gcc g++ pkgconfig python automake
+RUN apk add --no-cache git bash curl ca-certificates python3 make libstdc++ libgcc gcc g++ pkgconfig python2 automake autoconf
 
 COPY --from=src-cli /usr/bin/src /usr/bin
 
-RUN npm i -g n
-
-RUN npm install -g @sourcegraph/lsif-tsc
+RUN npm install --global n@latest @sourcegraph/lsif-tsc@latest
 
 CMD ["/bin/sh"]
