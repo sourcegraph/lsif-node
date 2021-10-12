@@ -32,7 +32,7 @@ jobs:
           git add .
           git commit -m "v${{ steps.get_version.outputs.NEW_VERSION }}"
       - name: Push changes
-        run: git push origin HEAD:main
+        run: git push origin HEAD:master
       - run: yarn run build
       - run: yarn publish
         env:
