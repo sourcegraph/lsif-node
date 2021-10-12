@@ -4,8 +4,10 @@ Visit https://lsif.dev/ to learn about LSIF.
 
 ## Installation
 
-```
+```sh
 npm install -g @sourcegraph/lsif-tsc
+# OR
+yarn global add @sourcegraph/lsif-tsc
 ```
 
 ## Indexing your repository
