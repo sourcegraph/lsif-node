@@ -26,7 +26,7 @@ jobs:
       - run: yarn install
       - run: yarn version --no-git-tag-version --new-version ${{ steps.get_version.outputs.NEW_VERSION }}
       - name: Generate changelog
-        run: npx github-changes -b maaster -o sourcegraph -r lsif-node --no-merges -t "LSIF Node" -k ${{ secrets.GH_PROJECTS_ACTION_TOKEN }}
+        run: npx github-changes -b master -o sourcegraph -r lsif-node --no-merges -t "LSIF Node" -k ${{ secrets.GITHUB_TOKEN }}
       - name: Commit changes
         run: |
           git add .
