@@ -3,9 +3,9 @@ name: release
 on:
   push:
     branches:
-      - olafurpg*
-  #  tags:
-  #     - v*
+      - olafurpg/docker-workflow
+   tags:
+      - v*
 
 jobs:
   release-image:
@@ -25,9 +25,9 @@ jobs:
       - run: echo "PATCH=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
       - run: echo "MINOR={PATCH%.*}" >> $GITHUB_ENV
       - run: echo "MAJOR=${MINOR%.*}" >> $GITHUB_ENV
-      - run: echo $ALL
+      - run: echo PATCH=$PATCH
         env:
-          ALL: ${{ env.PATCH }}
+          PATCH: ${{ env.PATCH }}
       # - name: Login to DockerHub
       #   uses: docker/login-action@v1
       #   with:
