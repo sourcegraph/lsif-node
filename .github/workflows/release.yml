@@ -21,18 +21,17 @@ jobs:
           git config --global user.name "Sourcegraph Bot"
       - uses: actions/checkout@v2
       - name: Get the tag version
-        id: get_version
-        run: echo ::set-output name=NEW_VERSION::${GITHUB_REF#refs/tags/v}
-      - run: yarn install
-      - run: yarn version --no-git-tag-version --new-version ${{ steps.get_version.outputs.NEW_VERSION }}
+        run: echo "NEW_VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - run: yarn version --no-git-tag-version --new-version ${{ env.NEW_VERSION }}
       - name: Generate changelog
         run: npx github-changes --only-pulls -b master -o sourcegraph -r lsif-node -t "LSIF Node" -k ${{ secrets.GITHUB_TOKEN }}
       - name: Commit changes
         run: |
           git add .
-          git commit -m "v${{ steps.get_version.outputs.NEW_VERSION }}"
+          git commit -m "v${{ env.NEW_VERSION }}"
       - name: Push changes
         run: git push origin HEAD:master
+      - run: yarn install
       - run: yarn run build
       - run: yarn publish
         env:
