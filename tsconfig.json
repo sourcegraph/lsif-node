@@ -11,5 +11,6 @@
     "outDir": "dist",
     "resolveJsonModule": true
   },
-  "include": ["./**/*"]
+  "include": ["./**/*"],
+  "exclude": ["lsif.ts"]
 }
