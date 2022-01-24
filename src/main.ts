@@ -6,6 +6,7 @@
  * ------------------------------------------------------------------------------------------ */
 import * as path from 'path'
 import * as fs from 'fs'
+import * as child_process from 'child_process'
 
 import minimist from 'minimist'
 
@@ -138,10 +139,34 @@ function createIdGenerator(): () => Id {
   }
 }
 
-function inferTSConfig(projectPath: string): boolean {
-  // TODO: Move logic from https://github.com/sourcegraph/sourcegraph/pull/30091
-  // into this function.
-  return false;
+/** Returns the list of directory paths under dir which contain a file
+  * with name matchingName.
+*/
+function listDirsRecursive(dir: string, matchingName: string): string[] {
+  let paths: string[] = [];
+  var basenames = fs.readdirSync(dir);
+  for (const basename of basenames) {
+    const path = dir + '/' + basename;
+    const stat = fs.statSync(path);
+    if (stat.isDirectory()) {
+      paths = paths.concat(listDirsRecursive(path, matchingName));
+    } else if (stat.isFile() && basename == matchingName) {
+      paths.push(dir);
+    }
+  }
+  return paths;
+}
+
+function createTSConfigAndEmitLSIF(dir: string): void {
+  // TypeScript packages on NPM are commonly distributed without a
+	// tsconfig.json file. Instead of skipping indexing altogether,
+	// synthesize some permissive tsconfig.json files.
+  fs.writeFileSync(dir + '/' + "tsconfig.json", '{"compilerOptions":{"allowJs":true}}');
+  const newArgv = process.argv.slice();
+  const index = newArgv.indexOf("--inferTSConfig");
+  console.assert(index > -1, "Expected --inferTSConfig to be in argv");
+  newArgv.splice(index, 1);
+  child_process.execSync(newArgv.join(" "));
 }
 
 async function processProject(
@@ -164,13 +189,16 @@ async function processProject(
     }
     if (!ts.sys.fileExists(tsconfigFileName)) {
       if (options.inferTSConfig) {
-        if (!inferTSConfig(projectPath)) {
-          console.error(
-            `Failed to infer tsconfig.json for project.`
-          )
-          process.exitCode = 1
+        const jsonDirs = listDirsRecursive(projectPath, "package.json");
+        if (jsonDirs.length == 0) {
+          console.error(`Failed to infer tsconfig.json for project.`);
+          process.exitCode = 1;
           return undefined
         }
+        for (const dir of jsonDirs) {
+          createTSConfigAndEmitLSIF(dir);
+        }
+        process.exit(0);
       } else {
         console.error(
           `Project configuration file ${tsconfigFileName} does not exist`
