@@ -433,10 +433,10 @@
   resolved "https://registry.npmjs.org/@types/normalize-package-data/-/normalize-package-data-2.4.1.tgz"
   integrity sha512-Gj7cI7z+98M282Tqmp2K5EIsoouUEzbBJhQQzDE3jSIRk6r9gsz0oUokqIUR4u1R3dMHo0pDHM7sNOHyhulypw==
 
-"@types/npm@2.0.32":
-  version "2.0.32"
-  resolved "https://registry.npmjs.org/@types/npm/-/npm-2.0.32.tgz"
-  integrity sha512-9Lg4woNVzJCtac0lET91H65lbO+8YXfk0nmlmoPGhHXMdaVEDloH6zOPIYMy2n39z/aCXXQR0nax66EDekAyIQ==
+"@types/npm@7.19.0":
+  version "7.19.0"
+  resolved "https://registry.yarnpkg.com/@types/npm/-/npm-7.19.0.tgz#a62382cea8ca8ef8452553e3d5daa68a331cda70"
+  integrity sha512-K/w+k8SnDjdQoK2fkUl9fHLAiVVmdFgdZ2/iGFuaaQC+wwaNdDQRTFaoCEYYrfCMbuVkhL3Lgqbi+p5d5I1lSg==
   dependencies:
     "@types/node" "*"
 
