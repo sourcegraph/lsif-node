@@ -29,6 +29,7 @@ interface Options {
   repositoryRoot: string
   addContents: boolean
   inferTypings: boolean
+  inferTSConfig: boolean
   out: string
 }
 
@@ -49,6 +50,7 @@ namespace Options {
     repositoryRoot: '',
     addContents: false,
     inferTypings: false,
+    inferTSConfig: false,
   }
   export const descriptions: OptionDescription[] = [
     {
@@ -91,6 +93,12 @@ namespace Options {
       default: false,
       description: 'Infer typings for JavaScript npm modules.',
     },
+    {
+      id: 'inferTSConfig',
+      type: 'boolean',
+      default: false,
+      description: 'Infer the tsconfig.json file for indexing.'
+    }
   ]
 }
 
@@ -130,6 +138,12 @@ function createIdGenerator(): () => Id {
   }
 }
 
+function inferTSConfig(projectPath: string): boolean {
+  // TODO: Move logic from https://github.com/sourcegraph/sourcegraph/pull/30091
+  // into this function.
+  return false;
+}
+
 async function processProject(
   config: ts.ParsedCommandLine,
   options: Options,
@@ -149,11 +163,21 @@ async function processProject(
       tsconfigFileName = projectPath
     }
     if (!ts.sys.fileExists(tsconfigFileName)) {
-      console.error(
-        `Project configuration file ${tsconfigFileName} does not exist`
-      )
-      process.exitCode = 1
-      return undefined
+      if (options.inferTSConfig) {
+        if (!inferTSConfig(projectPath)) {
+          console.error(
+            `Failed to infer tsconfig.json for project.`
+          )
+          process.exitCode = 1
+          return undefined
+        }
+      } else {
+        console.error(
+          `Project configuration file ${tsconfigFileName} does not exist`
+        )
+        process.exitCode = 1
+        return undefined
+      }
     }
     config = loadConfigFile(tsconfigFileName)
   }
