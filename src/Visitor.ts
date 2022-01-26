@@ -57,6 +57,7 @@ export class Visitor {
       return this.cached(node, pkg)
     }
     const owner = this.lsifSymbol(node.parent)
+
     if (owner.isEmptyOrLocal()) {
       return this.newLocalSymbol(node)
     }
