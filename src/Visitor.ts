@@ -119,6 +119,9 @@ export class Visitor {
     if (ts.isInterfaceDeclaration(node)) {
       return Descriptor.type(node.name.getText())
     }
+    if (ts.isClassDeclaration(node)) {
+      // TODO
+    }
     if (ts.isFunctionDeclaration(node) || ts.isMethodSignature(node)) {
       return Descriptor.method(node.name?.getText() || 'boom', '')
     }
