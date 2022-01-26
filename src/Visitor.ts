@@ -6,6 +6,7 @@ import { LsifSymbol } from './LsifSymbol'
 import { Packages } from './Packages'
 import { Descriptor } from './Descriptor'
 import { Counter } from './Counter'
+import { lsif_typed } from './main'
 
 export class Visitor {
   private localCounter = new Counter()
@@ -24,6 +25,17 @@ export class Visitor {
   }
   private visit(node: ts.Node): void {
     if (ts.isIdentifier(node)) {
+      let role = 0
+      const isDefinition = this.declarationName(node.parent) === node
+      console.log({
+        name: node.getText(),
+        isDefinition,
+        kind: ts.SyntaxKind[node.parent.kind],
+      })
+      if (isDefinition) {
+        role |= lsif_typed.SymbolRole.Definition
+      }
+
       const range = Range.fromNode(node)
       const sym = this.checker.getSymbolAtLocation(node)
       for (const declaration of sym?.declarations || []) {
@@ -32,6 +44,7 @@ export class Visitor {
           new lsif.lib.codeintel.lsif_typed.Occurrence({
             range: range.toLsif(),
             symbol: lsifSymbol.value,
+            symbol_roles: role,
           })
         )
       }
@@ -39,10 +52,26 @@ export class Visitor {
     ts.forEachChild(node, node => this.visit(node))
   }
 
-  private lsifSymbol(node?: ts.Node): LsifSymbol {
-    if (!node) {
-      return LsifSymbol.empty()
+  private declarationName(node: ts.Node): ts.Node | undefined {
+    if (
+      ts.isEnumDeclaration(node) ||
+      ts.isVariableDeclaration(node) ||
+      ts.isPropertyDeclaration(node) ||
+      ts.isMethodSignature(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isPropertySignature(node) ||
+      ts.isFunctionDeclaration(node) ||
+      ts.isModuleDeclaration(node) ||
+      ts.isPropertyAssignment(node) ||
+      ts.isShorthandPropertyAssignment(node) ||
+      ts.isInterfaceDeclaration(node)
+    ) {
+      return node.name
     }
+    return undefined
+  }
+
+  private lsifSymbol(node: ts.Node): LsifSymbol {
     const fromCache: LsifSymbol | undefined =
       this.symbolsCache.get(node) || this.localSymbolCache.get(node)
     if (fromCache) {
@@ -57,10 +86,6 @@ export class Visitor {
         return this.cached(node, LsifSymbol.empty())
       }
       return this.cached(node, pkg)
-    }
-    debug(node)
-    if (node.kind == ts.SyntaxKind.ShorthandPropertyAssignment) {
-      debug(node.parent)
     }
     if (
       ts.isPropertyAssignment(node) ||

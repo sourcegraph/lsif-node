@@ -2,9 +2,9 @@
 //         ^^^^^^^^ reference example 1.0.0 src/example.ts/redirect().
   
   export function foo() {
-//                ^^^ reference example 1.0.0 src/reference.ts/foo().
+//                ^^^ definition example 1.0.0 src/reference.ts/foo().
     const x = redirect()
-//        ^ reference local 2
+//        ^ definition local 2
 //            ^^^^^^^^ reference example 1.0.0 src/example.ts/redirect().
     return x.a + x.b + x.c.b.a + x.c.b.b + x.d
 //         ^ reference local 2
