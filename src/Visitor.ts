@@ -27,11 +27,11 @@ export class Visitor {
     if (ts.isIdentifier(node)) {
       let role = 0
       const isDefinition = this.declarationName(node.parent) === node
-      console.log({
-        name: node.getText(),
-        isDefinition,
-        kind: ts.SyntaxKind[node.parent.kind],
-      })
+      // console.log({
+      //   name: node.getText(),
+      //   isDefinition,
+      //   kind: ts.SyntaxKind[node.parent.kind],
+      // })
       if (isDefinition) {
         role |= lsif_typed.SymbolRole.Definition
       }
@@ -144,7 +144,9 @@ export class Visitor {
     if (ts.isInterfaceDeclaration(node)) {
       return Descriptor.type(node.name.getText())
     }
-    if (ts.isClassDeclaration(node)) {
+    if (ts.isClassLike(node)) {
+      console.log('CLASS')
+      console.log({ name: node?.name?.getText() })
       // TODO
     }
     if (ts.isFunctionDeclaration(node) || ts.isMethodSignature(node)) {
