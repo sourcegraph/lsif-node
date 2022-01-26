@@ -46,10 +46,11 @@ export class Visitor {
     if (fromCache) {
       return fromCache
     }
+    if (ts.isBlock(node)) {
+      return LsifSymbol.empty()
+    }
     if (ts.isSourceFile(node)) {
-      // node.parent === undefined
       const pkg = this.packages.symbol(node.fileName)
-      console.log({ pkg: pkg?.value })
       if (!pkg) {
         return this.cached(node, LsifSymbol.empty())
       }
@@ -63,8 +64,17 @@ export class Visitor {
     if (isAnonymousContainerOfSymbols(node)) {
       return this.cached(node, this.lsifSymbol(node.parent))
     }
+    if (ts.isImportSpecifier(node)) {
+      const tpe = this.checker.getTypeAtLocation(node)
+      for (const declaration of tpe.symbol.declarations || []) {
+        console.log({
+          tpe: declaration.getSourceFile().fileName,
+        })
+        return this.lsifSymbol(declaration)
+      }
+    }
 
-    const desc = descriptor(node)
+    const desc = this.descriptor(node)
     if (desc) {
       return this.cached(node, LsifSymbol.global(owner, desc))
     }
@@ -80,45 +90,47 @@ export class Visitor {
   }
   private cached(node: ts.Node, sym: LsifSymbol): LsifSymbol {
     this.symbolsCache.set(node, sym)
-    // console.log(sym.value)
     return sym
+  }
+  private descriptor(node: ts.Node): Descriptor | undefined {
+    if (ts.isInterfaceDeclaration(node)) {
+      return Descriptor.type(node.name.getText())
+    }
+    if (ts.isFunctionDeclaration(node) || ts.isMethodSignature(node)) {
+      return Descriptor.method(node.name?.getText() || 'boom', '')
+    }
+    if (
+      ts.isPropertyDeclaration(node) ||
+      ts.isPropertySignature(node) ||
+      ts.isVariableDeclaration(node)
+    ) {
+      return Descriptor.term(node.name.getText())
+    }
+    if (ts.isModuleDeclaration(node)) {
+      return Descriptor.package(node.name.getText())
+    }
+    if (ts.isImportSpecifier(node)) {
+      const tpe = this.checker.getTypeAtLocation(node)
+      for (const declaration of tpe.symbol.declarations || []) {
+        console.log({
+          tpe: declaration.getSourceFile().fileName,
+        })
+        return this.descriptor(declaration)
+      }
+    }
+    return undefined
   }
 }
 
 function isAnonymousContainerOfSymbols(node: ts.Node): boolean {
   return (
     ts.isModuleBlock(node) ||
+    ts.isImportDeclaration(node) ||
+    ts.isImportClause(node) ||
+    ts.isNamedImports(node) ||
     ts.isVariableStatement(node) ||
     ts.isVariableDeclarationList(node)
   )
-}
-
-function descriptor(node: ts.Node): Descriptor | undefined {
-  if (ts.isInterfaceDeclaration(node)) {
-    return Descriptor.type(node.name.getText())
-  }
-  if (ts.isFunctionDeclaration(node) || ts.isMethodSignature(node)) {
-    return Descriptor.method(node.name?.getText() || 'boom', '')
-  }
-  if (
-    ts.isPropertyDeclaration(node) ||
-    ts.isPropertySignature(node) ||
-    ts.isVariableDeclaration(node)
-  ) {
-    return Descriptor.term(node.name.getText())
-  }
-  // if (ts.isVariableStatement(node)) {
-  //   if (node.declarationList.declarations.length > 1) {
-  //     throw new Error('boom - multiple declarations')
-  //   }
-  //   for (const declaration of node.declarationList.declarations) {
-  //     return Descriptor.term(declaration.name.getText())
-  //   }
-  // }
-  if (ts.isModuleDeclaration(node)) {
-    return Descriptor.package(node.name.getText())
-  }
-  return undefined
 }
 
 function debug(node: ts.Node): void {
