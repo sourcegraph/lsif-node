@@ -2,7 +2,7 @@ import * as ts from 'typescript'
 import * as lsif from './lsif'
 import { Input } from './Input'
 import { Range } from './Range'
-import { Symbol } from './Symbol'
+import { Sym } from './Sym'
 
 export class Visitor {
   private localCounter = 0
@@ -10,7 +10,7 @@ export class Visitor {
     public readonly checker: ts.TypeChecker,
     public readonly input: Input,
     public readonly doc: lsif.lib.codeintel.lsif_typed.Document,
-    public readonly symbolsCache: Map<ts.Node, string>
+    public readonly symbolsCache: Map<ts.Node, Sym>
   ) {}
   public visit(node: ts.Node): void {
     if (ts.isIdentifier(node)) {
@@ -22,37 +22,33 @@ export class Visitor {
         this.doc.occurrences.push(
           new lsif.lib.codeintel.lsif_typed.Occurrence({
             range: range.toLsif(),
-            symbol: lsifSymbol,
+            symbol: lsifSymbol.value,
           })
         )
       }
     }
-    ts.forEachChild(node, (node) => this.visit(node))
+    ts.forEachChild(node, node => this.visit(node))
   }
 
-  private lsifSymbol(declaration: ts.Node): string {
-    if (declaration === null || declaration === undefined) {
-      return ''
+  private lsifSymbol(declaration?: ts.Node): Sym {
+    if (!declaration) {
+      return Sym.empty()
     }
     const fromCache = this.symbolsCache.get(declaration)
     if (fromCache) {
       return fromCache
     }
     const parent = this.lsifSymbol(declaration.parent)
-    if (this.isLocalLsifSymbol(parent)) {
-      const symbol = Symbol.local(this.localCounter).value
+    if (parent.isEmptyOrLocal()) {
+      const symbol = Sym.local(this.localCounter)
       this.localCounter++
       this.symbolsCache.set(declaration, symbol)
       return symbol
     }
 
     if (ts.isInterfaceDeclaration(declaration)) {
-      declaration.name
+      console.log(declaration.name)
     }
-    return ''
-  }
-
-  private isLocalLsifSymbol(symbol: string): boolean {
-    return symbol === '' || symbol.startsWith('local ')
+    return Sym.empty()
   }
 }

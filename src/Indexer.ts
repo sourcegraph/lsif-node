@@ -4,19 +4,20 @@ import * as lsif from './lsif'
 import { Input } from './Input'
 import { Options, DocEntry, lsif_typed } from './main'
 import { Visitor } from './Visitor'
+import { Sym } from './Sym'
 
 export class Indexer {
-  options: Options
-  program: ts.Program
-  checker: ts.TypeChecker
-  output: DocEntry[] = []
-  symbolsCache: Map<ts.Node, string> = new Map()
+  public options: Options
+  public program: ts.Program
+  public checker: ts.TypeChecker
+  public output: DocEntry[] = []
+  public symbolsCache: Map<ts.Node, Sym> = new Map()
   constructor(public readonly config: ts.ParsedCommandLine, options: Options) {
     this.options = options
     this.program = ts.createProgram(config.fileNames, config.options)
     this.checker = this.program.getTypeChecker()
   }
-  public index() {
+  public index(): void {
     this.options.writeIndex(
       new lsif_typed.Index({
         metadata: new lsif_typed.Metadata({

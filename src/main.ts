@@ -22,20 +22,21 @@ export interface Options {
 }
 
 export function main(): void {
+  // tslint:disable-next-line: no-unused-expression
   yargs
     .scriptName('lsif-node')
     .usage('$0 <cmd> [args]')
     .command(
       'index [project]',
       'LSIF index a project',
-      (yargs) => {
+      yargs => {
         yargs.positional('project', {
           type: 'string',
           default: '.',
           describe: 'the directory to index',
         })
       },
-      (argv) => {
+      argv => {
         index({
           project: argv.project as string,
           writeIndex: (index): void => {
@@ -73,7 +74,6 @@ export function index(options: Options): void {
     if (!ts.sys.fileExists(tsconfigFileName)) {
       console.error(`no such file: ${tsconfigFileName}`)
       process.exitCode = 1
-      return undefined
     }
     config = loadConfigFile(tsconfigFileName)
   }
@@ -83,7 +83,6 @@ export function index(options: Options): void {
   if (config.fileNames.length === 0) {
     console.error(`no input files`)
     process.exitCode = 1
-    return undefined
   }
 
   new Indexer(config, options).index()
@@ -94,22 +93,22 @@ if (require.main === module) {
 }
 
 function loadConfigFile(file: string): ts.ParsedCommandLine {
-  let absolute = path.resolve(file)
+  const absolute = path.resolve(file)
 
-  let readResult = ts.readConfigFile(absolute, ts.sys.readFile)
+  const readResult = ts.readConfigFile(absolute, path => ts.sys.readFile(path))
   if (readResult.error) {
     throw new Error(
       ts.formatDiagnostics([readResult.error], ts.createCompilerHost({}))
     )
   }
-  let config = readResult.config
+  const config = readResult.config
   if (config.compilerOptions !== undefined) {
-    config.compilerOptions = Object.assign(
-      config.compilerOptions,
-      getDefaultCompilerOptions(file)
-    )
+    config.compilerOptions = {
+      ...config.compilerOptions,
+      ...defaultCompilerOptions(file),
+    }
   }
-  let result = ts.parseJsonConfigFileContent(
+  const result = ts.parseJsonConfigFileContent(
     config,
     ts.sys,
     path.dirname(absolute)
@@ -122,7 +121,7 @@ function loadConfigFile(file: string): ts.ParsedCommandLine {
   return result
 }
 
-function getDefaultCompilerOptions(configFileName?: string) {
+function defaultCompilerOptions(configFileName?: string): ts.CompilerOptions {
   const options: ts.CompilerOptions =
     configFileName && path.basename(configFileName) === 'jsconfig.json'
       ? {
