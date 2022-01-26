@@ -5,9 +5,11 @@ import { Range } from './Range'
 import { LsifSymbol } from './LsifSymbol'
 import { Packages } from './Packages'
 import { Descriptor } from './Descriptor'
+import { Counter } from './Counter'
 
 export class Visitor {
-  private localCounter = 0
+  private localCounter = new Counter()
+  private propertyCounters: Map<string, Counter> = new Map()
   private localSymbolCache: Map<ts.Node, LsifSymbol> = new Map()
   constructor(
     public readonly checker: ts.TypeChecker,
@@ -56,8 +58,29 @@ export class Visitor {
       }
       return this.cached(node, pkg)
     }
+    debug(node)
+    if (node.kind == ts.SyntaxKind.ShorthandPropertyAssignment) {
+      debug(node.parent)
+    }
+    if (
+      ts.isPropertyAssignment(node) ||
+      ts.isShorthandPropertyAssignment(node)
+    ) {
+      const name = node.name.getText()
+      let counter = this.propertyCounters.get(name)
+      if (!counter) {
+        counter = new Counter()
+        this.propertyCounters.set(name, counter)
+      }
+      return this.cached(
+        node,
+        LsifSymbol.global(
+          this.lsifSymbol(node.getSourceFile()),
+          Descriptor.meta(`${node.name.getText()}${counter.next()}`)
+        )
+      )
+    }
     const owner = this.lsifSymbol(node.parent)
-
     if (owner.isEmptyOrLocal()) {
       return this.newLocalSymbol(node)
     }
@@ -84,8 +107,7 @@ export class Visitor {
   }
 
   private newLocalSymbol(node: ts.Node): LsifSymbol {
-    const symbol = LsifSymbol.local(this.localCounter)
-    this.localCounter++
+    const symbol = LsifSymbol.local(this.localCounter.next())
     this.localSymbolCache.set(node, symbol)
     return symbol
   }

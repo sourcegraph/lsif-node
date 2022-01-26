@@ -2,6 +2,7 @@ enum DescriptorKind {
   Package,
   Type,
   Term,
+  Meta,
   Method,
   Parameter,
   TypeParameter,
@@ -22,6 +23,9 @@ export class Descriptor {
   public static term(name: string): Descriptor {
     return new Descriptor(name, DescriptorKind.Term)
   }
+  public static meta(name: string): Descriptor {
+    return new Descriptor(name, DescriptorKind.Meta)
+  }
   public static method(name: string, disambiguator: string): Descriptor {
     return new Descriptor(name, DescriptorKind.Method, disambiguator)
   }
@@ -39,6 +43,8 @@ export class Descriptor {
         return this.nameSyntax() + '#'
       case DescriptorKind.Term:
         return this.nameSyntax() + '.'
+      case DescriptorKind.Meta:
+        return this.nameSyntax() + ':'
       case DescriptorKind.Method:
         return this.nameSyntax() + '(' + (this.disambiguator || '') + ').'
       case DescriptorKind.Parameter:
