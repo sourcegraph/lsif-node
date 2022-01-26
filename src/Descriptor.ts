@@ -1,3 +1,12 @@
+enum DescriptorKind {
+  Package,
+  Type,
+  Term,
+  Method,
+  Parameter,
+  TypeParameter,
+}
+
 export class Descriptor {
   private constructor(
     public readonly name: string,
@@ -11,7 +20,7 @@ export class Descriptor {
     return new Descriptor(name, DescriptorKind.Type)
   }
   public static term(name: string): Descriptor {
-    return new Descriptor(name, DescriptorKind.Type)
+    return new Descriptor(name, DescriptorKind.Term)
   }
   public static method(name: string, disambiguator: string): Descriptor {
     return new Descriptor(name, DescriptorKind.Method, disambiguator)
@@ -43,13 +52,4 @@ export class Descriptor {
   private nameSyntax(): string {
     return this.name
   }
-}
-
-enum DescriptorKind {
-  Package = 0,
-  Type = 0,
-  Term = 0,
-  Method = 0,
-  Parameter = 0,
-  TypeParameter = 0,
 }

@@ -4,18 +4,21 @@ import * as lsif from './lsif'
 import { Input } from './Input'
 import { Options, DocEntry, lsif_typed } from './main'
 import { Visitor } from './Visitor'
-import { Sym } from './Sym'
+import { LsifSymbol } from './LsifSymbol'
+import { Packages } from './Packages'
 
 export class Indexer {
   public options: Options
   public program: ts.Program
   public checker: ts.TypeChecker
   public output: DocEntry[] = []
-  public symbolsCache: Map<ts.Node, Sym> = new Map()
+  public symbolsCache: Map<ts.Node, LsifSymbol> = new Map()
+  public packages: Packages
   constructor(public readonly config: ts.ParsedCommandLine, options: Options) {
     this.options = options
     this.program = ts.createProgram(config.fileNames, config.options)
     this.checker = this.program.getTypeChecker()
+    this.packages = new Packages(options.project)
   }
   public index(): void {
     this.options.writeIndex(
@@ -37,9 +40,16 @@ export class Indexer {
           occurrences: [],
         })
         const input = new Input(sourceFile.fileName, sourceFile.getText())
-        const visitor = new Visitor(this.checker, input, doc, this.symbolsCache)
+        const visitor = new Visitor(
+          this.checker,
+          input,
+          doc,
+          this.symbolsCache,
+          this.packages,
+          sourceFile
+        )
         // console.log({ fileName: sourceFile.fileName });
-        visitor.visit(sourceFile)
+        visitor.index()
         if (visitor.doc.occurrences.length > 0) {
           this.options.writeIndex(
             new lsif.lib.codeintel.lsif_typed.Index({

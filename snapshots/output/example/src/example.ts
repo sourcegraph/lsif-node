@@ -1,76 +1,97 @@
-  import { join } from "path";
-//         ^^^^ reference local 4
+  import { join } from 'path'
+//         ^^^^ reference local 3
+  
+  interface Container {
+//          ^^^^^^^^^ reference example 1.0.0 src/example.ts/Container#
+    prop: string
+//  ^^^^ reference example 1.0.0 src/example.ts/Container#prop.
+    bar(): string
+//  ^^^ reference example 1.0.0 src/example.ts/Container#bar().
+  }
+  
+  export function hello(): Container {
+//                ^^^^^ reference example 1.0.0 src/example.ts/hello().
+//                         ^^^^^^^^^ reference example 1.0.0 src/example.ts/Container#
+    return {
+      prop: '',
+//    ^^^^ reference local 7
+      bar() {
+//    ^^^ reference local 8
+        return ''
+      },
+    }
+  }
   interface Hello {
-//          ^^^^^ reference local 5
-    name: string;
-//  ^^^^ reference local 6
+//          ^^^^^ reference example 1.0.0 src/example.ts/Hello#
+    name: string
+//  ^^^^ reference example 1.0.0 src/example.ts/Hello#name.
   }
   
   export function main(h: Hello): void {
-//                ^^^^ reference local 7
-//                     ^ reference local 8
-//                        ^^^^^ reference local 5
-    const message = `hello ${h.name}!`;
-//        ^^^^^^^ reference local 12
-//                           ^ reference local 8
-//                             ^^^^ reference local 6
-    console.log(join(message, message));
-//  ^^^^^^^ reference local 16
-//  ^^^^^^^ reference local 20
-//  ^^^^^^^ reference local 26
-//  ^^^^^^^ reference local 29
-//          ^^^ reference local 31
-//          ^^^ reference local 33
-//              ^^^^ reference local 4
-//                   ^^^^^^^ reference local 12
-//                            ^^^^^^^ reference local 12
+//                ^^^^ reference example 1.0.0 src/example.ts/main().
+//                     ^ reference local 9
+//                        ^^^^^ reference example 1.0.0 src/example.ts/Hello#
+    const message = `hello ${h.name}!`
+//        ^^^^^^^ reference local 13
+//                           ^ reference local 9
+//                             ^^^^ reference example 1.0.0 src/example.ts/Hello#name.
+    console.log(join(message, message))
+//  ^^^^^^^ reference typescript 4.5.5 lib/lib.dom.d.ts/console.
+//  ^^^^^^^ reference @types/node 17.0.10 globals.d.ts/console.
+//  ^^^^^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/console/
+//  ^^^^^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/console.
+//          ^^^ reference typescript 4.5.5 lib/lib.dom.d.ts/Console#log().
+//          ^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/Console#log().
+//              ^^^^ reference local 3
+//                   ^^^^^^^ reference local 13
+//                            ^^^^^^^ reference local 13
   }
   
-  export function helper() {
-//                ^^^^^^ reference local 34
-    const hello1 = { name: "Susan" };
-//        ^^^^^^ reference local 38
-//                   ^^^^ reference local 40
-    console.log(hello1.name);
-//  ^^^^^^^ reference local 16
-//  ^^^^^^^ reference local 20
-//  ^^^^^^^ reference local 26
-//  ^^^^^^^ reference local 29
-//          ^^^ reference local 31
-//          ^^^ reference local 33
-//              ^^^^^^ reference local 38
-//                     ^^^^ reference local 40
-    main(hello1);
-//  ^^^^ reference local 7
-//       ^^^^^^ reference local 38
+  export function helper(): void {
+//                ^^^^^^ reference example 1.0.0 src/example.ts/helper().
+    const hello1 = { name: 'Susan' }
+//        ^^^^^^ reference local 17
+//                   ^^^^ reference local 19
+    console.log(hello1.name)
+//  ^^^^^^^ reference typescript 4.5.5 lib/lib.dom.d.ts/console.
+//  ^^^^^^^ reference @types/node 17.0.10 globals.d.ts/console.
+//  ^^^^^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/console/
+//  ^^^^^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/console.
+//          ^^^ reference typescript 4.5.5 lib/lib.dom.d.ts/Console#log().
+//          ^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/Console#log().
+//              ^^^^^^ reference local 17
+//                     ^^^^ reference local 19
+    main(hello1)
+//  ^^^^ reference example 1.0.0 src/example.ts/main().
+//       ^^^^^^ reference local 17
   
-    const hello2: Hello = { name: "Susan" };
-//        ^^^^^^ reference local 43
-//                ^^^^^ reference local 5
-//                          ^^^^ reference local 45
-    console.log(hello2.name);
-//  ^^^^^^^ reference local 16
-//  ^^^^^^^ reference local 20
-//  ^^^^^^^ reference local 26
-//  ^^^^^^^ reference local 29
-//          ^^^ reference local 31
-//          ^^^ reference local 33
-//              ^^^^^^ reference local 43
-//                     ^^^^ reference local 6
-    const hello3 = { hello2 };
-//        ^^^^^^ reference local 48
-//                   ^^^^^^ reference local 50
-    console.log(hello3.hello2);
-//  ^^^^^^^ reference local 16
-//  ^^^^^^^ reference local 20
-//  ^^^^^^^ reference local 26
-//  ^^^^^^^ reference local 29
-//          ^^^ reference local 31
-//          ^^^ reference local 33
-//              ^^^^^^ reference local 48
-//                     ^^^^^^ reference local 50
-    main(hello2);
-//  ^^^^ reference local 7
-//       ^^^^^^ reference local 43
+    const hello2: Hello = { name: 'Susan' }
+//        ^^^^^^ reference local 22
+//                ^^^^^ reference example 1.0.0 src/example.ts/Hello#
+//                          ^^^^ reference local 24
+    console.log(hello2.name)
+//  ^^^^^^^ reference typescript 4.5.5 lib/lib.dom.d.ts/console.
+//  ^^^^^^^ reference @types/node 17.0.10 globals.d.ts/console.
+//  ^^^^^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/console/
+//  ^^^^^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/console.
+//          ^^^ reference typescript 4.5.5 lib/lib.dom.d.ts/Console#log().
+//          ^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/Console#log().
+//              ^^^^^^ reference local 22
+//                     ^^^^ reference example 1.0.0 src/example.ts/Hello#name.
+    const hello3 = { hello2 }
+//        ^^^^^^ reference local 27
+//                   ^^^^^^ reference local 29
+    console.log(hello3.hello2)
+//  ^^^^^^^ reference typescript 4.5.5 lib/lib.dom.d.ts/console.
+//  ^^^^^^^ reference @types/node 17.0.10 globals.d.ts/console.
+//  ^^^^^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/console/
+//  ^^^^^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/console.
+//          ^^^ reference typescript 4.5.5 lib/lib.dom.d.ts/Console#log().
+//          ^^^ reference @types/node 17.0.10 console.d.ts/'node:console'/global/Console#log().
+//              ^^^^^^ reference local 27
+//                     ^^^^^^ reference local 29
+    main(hello2)
+//  ^^^^ reference example 1.0.0 src/example.ts/main().
+//       ^^^^^^ reference local 22
   }
   

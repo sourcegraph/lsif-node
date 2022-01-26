@@ -20,7 +20,7 @@ const outputDir = join(process.cwd(), 'snapshots', 'output')
 
 const snapshotDirectories = fs.readdirSync(inputDir)
 const isUpdate = isUpdateSnapshot()
-if (isUpdate) {
+if (isUpdate && fs.existsSync(outputDir)) {
   fs.rmSync(outputDir, { recursive: true })
 }
 for (const snapshotDirectory of snapshotDirectories) {
@@ -28,7 +28,7 @@ for (const snapshotDirectory of snapshotDirectories) {
     const index = new lsif.lib.codeintel.lsif_typed.Index()
     lsifIndex({
       project: join(inputDir, snapshotDirectory),
-      writeIndex: (partialIndex) => {
+      writeIndex: partialIndex => {
         if (partialIndex.metadata) {
           index.metadata = partialIndex.metadata
         }
@@ -106,7 +106,10 @@ function formatSnapshot(
         (occurrence.symbol_roles & lsif_typed.SymbolRole.Definition) > 0
       out.push(isDefinition ? 'definition' : 'reference')
       out.push(' ')
-      out.push(occurrence.symbol)
+      const symbol = occurrence.symbol.startsWith('lsif-node npm ')
+        ? occurrence.symbol.slice('lsif-noode npm'.length)
+        : occurrence.symbol
+      out.push(symbol)
       out.push('\n')
     }
   }
