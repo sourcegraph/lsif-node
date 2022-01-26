@@ -64,6 +64,8 @@ export class Visitor {
       ts.isModuleDeclaration(node) ||
       ts.isPropertyAssignment(node) ||
       ts.isShorthandPropertyAssignment(node) ||
+      ts.isParameter(node) ||
+      ts.isTypeParameterDeclaration(node) ||
       ts.isInterfaceDeclaration(node)
     ) {
       return node.name
@@ -141,20 +143,29 @@ export class Visitor {
     return sym
   }
   private descriptor(node: ts.Node): Descriptor | undefined {
-    if (ts.isInterfaceDeclaration(node)) {
+    if (ts.isInterfaceDeclaration(node) || ts.isEnumDeclaration(node)) {
       return Descriptor.type(node.name.getText())
     }
     if (ts.isClassLike(node)) {
-      console.log('CLASS')
-      console.log({ name: node?.name?.getText() })
-      // TODO
+      const name = node.name?.getText()
+      if (name) {
+        return Descriptor.type(name)
+      }
     }
-    if (ts.isFunctionDeclaration(node) || ts.isMethodSignature(node)) {
+    if (
+      ts.isFunctionDeclaration(node) ||
+      ts.isMethodSignature(node) ||
+      ts.isMethodDeclaration(node)
+    ) {
       return Descriptor.method(node.name?.getText() || 'boom', '')
+    }
+    if (ts.isConstructorDeclaration(node)) {
+      return Descriptor.method(`<constructor>`, '')
     }
     if (
       ts.isPropertyDeclaration(node) ||
       ts.isPropertySignature(node) ||
+      ts.isEnumMember(node) ||
       ts.isVariableDeclaration(node)
     ) {
       return Descriptor.term(node.name.getText())
@@ -162,14 +173,11 @@ export class Visitor {
     if (ts.isModuleDeclaration(node)) {
       return Descriptor.package(node.name.getText())
     }
-    if (ts.isImportSpecifier(node)) {
-      const tpe = this.checker.getTypeAtLocation(node)
-      for (const declaration of tpe.symbol.declarations || []) {
-        console.log({
-          tpe: declaration.getSourceFile().fileName,
-        })
-        return this.descriptor(declaration)
-      }
+    if (ts.isParameter(node)) {
+      return Descriptor.parameter(node.name.getText())
+    }
+    if (ts.isTypeParameterDeclaration(node)) {
+      return Descriptor.typeParameter(node.name.getText())
     }
     return undefined
   }
