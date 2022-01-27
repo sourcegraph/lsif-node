@@ -130,11 +130,21 @@ export class Visitor {
   private newLocalSymbol(node: ts.Node): LsifSymbol {
     const symbol = LsifSymbol.local(this.localCounter.next())
     this.localSymbolTable.set(node, symbol)
+    this.addSymbolInformation(node, symbol)
     return symbol
   }
-  private cached(node: ts.Node, sym: LsifSymbol): LsifSymbol {
-    this.globalSymbolTable.set(node, sym)
-    return sym
+  private cached(node: ts.Node, symbol: LsifSymbol): LsifSymbol {
+    this.globalSymbolTable.set(node, symbol)
+    this.addSymbolInformation(node, symbol)
+    return symbol
+  }
+  private addSymbolInformation(node: ts.Node, symbol: LsifSymbol): void {
+    this.doc.symbols.push(
+      new lsif_typed.SymbolInformation({
+        symbol: symbol.value,
+        documentation: [node.getText()],
+      })
+    )
   }
   private descriptor(node: ts.Node): Descriptor | undefined {
     if (ts.isInterfaceDeclaration(node) || ts.isEnumDeclaration(node)) {

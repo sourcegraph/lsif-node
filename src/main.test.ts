@@ -26,8 +26,9 @@ if (isUpdate && fs.existsSync(outputDir)) {
 for (const snapshotDirectory of snapshotDirectories) {
   test(snapshotDirectory, () => {
     const index = new lsif.lib.codeintel.lsif_typed.Index()
+    const projectRoot = join(inputDir, snapshotDirectory)
     lsifIndex({
-      project: join(inputDir, snapshotDirectory),
+      project: projectRoot,
       writeIndex: partialIndex => {
         if (partialIndex.metadata) {
           index.metadata = partialIndex.metadata
@@ -37,6 +38,10 @@ for (const snapshotDirectory of snapshotDirectories) {
         }
       },
     })
+    fs.writeFileSync(
+      path.join(projectRoot, 'dump.lsif-typed'),
+      index.serializeBinary()
+    )
     for (const document of index.documents) {
       const inputPath = path.join(
         index.metadata.project_root,
