@@ -11,12 +11,12 @@ import { lsif_typed } from './main'
 export class Visitor {
   private localCounter = new Counter()
   private propertyCounters: Map<string, Counter> = new Map()
-  private localSymbolCache: Map<ts.Node, LsifSymbol> = new Map()
+  private localSymbolTable: Map<ts.Node, LsifSymbol> = new Map()
   constructor(
     public readonly checker: ts.TypeChecker,
     public readonly input: Input,
     public readonly doc: lsif.lib.codeintel.lsif_typed.Document,
-    public readonly symbolsCache: Map<ts.Node, LsifSymbol>,
+    public readonly globalSymbolTable: Map<ts.Node, LsifSymbol>,
     public readonly packages: Packages,
     public readonly sourceFile: ts.SourceFile
   ) {}
@@ -27,15 +27,9 @@ export class Visitor {
     if (ts.isIdentifier(node)) {
       let role = 0
       const isDefinition = this.declarationName(node.parent) === node
-      // console.log({
-      //   name: node.getText(),
-      //   isDefinition,
-      //   kind: ts.SyntaxKind[node.parent.kind],
-      // })
       if (isDefinition) {
         role |= lsif_typed.SymbolRole.Definition
       }
-
       const range = Range.fromNode(node)
       const sym = this.checker.getSymbolAtLocation(node)
       for (const declaration of sym?.declarations || []) {
@@ -75,7 +69,7 @@ export class Visitor {
 
   private lsifSymbol(node: ts.Node): LsifSymbol {
     const fromCache: LsifSymbol | undefined =
-      this.symbolsCache.get(node) || this.localSymbolCache.get(node)
+      this.globalSymbolTable.get(node) || this.localSymbolTable.get(node)
     if (fromCache) {
       return fromCache
     }
@@ -135,11 +129,11 @@ export class Visitor {
 
   private newLocalSymbol(node: ts.Node): LsifSymbol {
     const symbol = LsifSymbol.local(this.localCounter.next())
-    this.localSymbolCache.set(node, symbol)
+    this.localSymbolTable.set(node, symbol)
     return symbol
   }
   private cached(node: ts.Node, sym: LsifSymbol): LsifSymbol {
-    this.symbolsCache.set(node, sym)
+    this.globalSymbolTable.set(node, sym)
     return sym
   }
   private descriptor(node: ts.Node): Descriptor | undefined {
