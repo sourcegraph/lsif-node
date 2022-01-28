@@ -1,4 +1,4 @@
-  export function hello(): any {
+  export function hello() {
 //                ^^^^^ definition example 1.0.0 src/example.ts/hello().
     const a = 'a'
 //        ^ definition local 2
