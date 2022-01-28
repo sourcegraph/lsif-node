@@ -1,4 +1,5 @@
 import * as path from 'path'
+import * as url from 'url'
 import * as ts from 'typescript'
 import * as lsif from './lsif'
 import { Input } from './Input'
@@ -24,7 +25,12 @@ export class Indexer {
     this.options.writeIndex(
       new lsif_typed.Index({
         metadata: new lsif_typed.Metadata({
-          project_root: this.options.project,
+          project_root: url.pathToFileURL(this.options.project).toString(),
+          tool_info: new lsif_typed.ToolInfo({
+            name: 'lsif-node',
+            version: '1.0.0',
+            arguments: [],
+          }),
         }),
       })
     )

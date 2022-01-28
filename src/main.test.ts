@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as process from 'process'
+import * as url from 'url'
 import { join } from 'path'
 import { index as lsifIndex } from './main'
 import { Range } from './Range'
@@ -52,7 +53,7 @@ for (const snapshotDirectory of snapshotDirectories) {
       const expected: string = fs.existsSync(outputPath)
         ? fs.readFileSync(outputPath).toString()
         : ''
-      const input = Input.fromFile(inputPath)
+      const input = Input.fromFile(url.fileURLToPath(inputPath))
       const obtained = formatSnapshot(input, document)
       if (obtained !== expected) {
         if (isUpdate) {
