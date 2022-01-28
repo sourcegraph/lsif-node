@@ -25,46 +25,55 @@ export class Visitor {
   }
   private visit(node: ts.Node): void {
     if (ts.isIdentifier(node)) {
-      let role = 0
-      const isDefinition = this.declarationName(node.parent) === node
-      if (isDefinition) {
-        role |= lsif_typed.SymbolRole.Definition
-      }
-      const range = Range.fromNode(node).toLsif()
       const sym = this.checker.getSymbolAtLocation(node)
       if (sym) {
-        for (const declaration of sym?.declarations || []) {
-          const lsifSymbol = this.lsifSymbol(declaration)
-          this.doc.occurrences.push(
-            new lsif.lib.codeintel.lsif_typed.Occurrence({
-              range,
-              symbol: lsifSymbol.value,
-              symbol_roles: role,
-            })
-          )
-          if (isDefinition) {
-            this.addSymbolInformation(node, sym, lsifSymbol)
-            if (
-              declaration.kind === ts.SyntaxKind.ShorthandPropertyAssignment
-            ) {
-              const valueSymbol =
-                this.checker.getShorthandAssignmentValueSymbol(declaration)
-              if (valueSymbol) {
-                for (const symbol of valueSymbol?.declarations || []) {
-                  this.doc.occurrences.push(
-                    new lsif.lib.codeintel.lsif_typed.Occurrence({
-                      range,
-                      symbol: this.lsifSymbol(symbol).value,
-                    })
-                  )
-                }
-              }
-            }
-          }
-        }
+        this.visitIdentifier(node, sym)
       }
     }
     ts.forEachChild(node, node => this.visit(node))
+  }
+
+  private visitIdentifier(node: ts.Identifier, sym: ts.Symbol): void {
+    const range = Range.fromNode(node).toLsif()
+    let role = 0
+    const isDefinition = this.declarationName(node.parent) === node
+    if (isDefinition) {
+      role |= lsif_typed.SymbolRole.Definition
+    }
+    for (const declaration of sym?.declarations || []) {
+      const lsifSymbol = this.lsifSymbol(declaration)
+      this.doc.occurrences.push(
+        new lsif.lib.codeintel.lsif_typed.Occurrence({
+          range,
+          symbol: lsifSymbol.value,
+          symbol_roles: role,
+        })
+      )
+      if (isDefinition) {
+        this.addSymbolInformation(node, sym, lsifSymbol)
+        this.handleShorthandPropertyDefinition(declaration, range)
+      }
+    }
+  }
+
+  private handleShorthandPropertyDefinition(
+    declaration: ts.Node,
+    range: number[]
+  ): void {
+    if (declaration.kind === ts.SyntaxKind.ShorthandPropertyAssignment) {
+      const valueSymbol =
+        this.checker.getShorthandAssignmentValueSymbol(declaration)
+      if (valueSymbol) {
+        for (const symbol of valueSymbol?.declarations || []) {
+          this.doc.occurrences.push(
+            new lsif.lib.codeintel.lsif_typed.Occurrence({
+              range,
+              symbol: this.lsifSymbol(symbol).value,
+            })
+          )
+        }
+      }
+    }
   }
 
   private addSymbolInformation(
