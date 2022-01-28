@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/sourcegraph/sourcegraph/master/shared/src/schema/extension.schema.json",
-  "name": "@sourcegraph/lsif-tsc",
+  "name": "@sourcegraph/lsif-node",
   "description": "A tool to create an LSIF dump for TypeScript projects.",
   "sideEffects": false,
   "publisher": "sourcegraph",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -15,7 +15,7 @@
   },
   "main": "./dist/src/main.js",
   "bin": {
-    "lsif-tsc": "./dist/src/main.js"
+    "lsif-node": "./dist/src/main.js"
   },
   "files": [
     "dist",

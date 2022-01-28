@@ -32,18 +32,39 @@ export class Visitor {
       }
       const range = Range.fromNode(node)
       const sym = this.checker.getSymbolAtLocation(node)
-      for (const declaration of sym?.declarations || []) {
-        const lsifSymbol = this.lsifSymbol(declaration)
-        this.doc.occurrences.push(
-          new lsif.lib.codeintel.lsif_typed.Occurrence({
-            range: range.toLsif(),
-            symbol: lsifSymbol.value,
-            symbol_roles: role,
-          })
-        )
+      if (sym) {
+        for (const declaration of sym?.declarations || []) {
+          const lsifSymbol = this.lsifSymbol(declaration)
+          this.doc.occurrences.push(
+            new lsif.lib.codeintel.lsif_typed.Occurrence({
+              range: range.toLsif(),
+              symbol: lsifSymbol.value,
+              symbol_roles: role,
+            })
+          )
+          if (isDefinition) {
+            this.addSymbolInformation(node, sym, lsifSymbol)
+          }
+        }
       }
     }
     ts.forEachChild(node, node => this.visit(node))
+  }
+
+  private addSymbolInformation(
+    node: ts.Node,
+    sym: ts.Symbol,
+    symbol: LsifSymbol
+  ): void {
+    this.doc.symbols.push(
+      new lsif_typed.SymbolInformation({
+        symbol: symbol.value,
+        documentation: [
+          this.checker.typeToString(this.checker.getTypeAtLocation(node)),
+          ts.displayPartsToString(sym.getDocumentationComment(this.checker)),
+        ],
+      })
+    )
   }
 
   private declarationName(node: ts.Node): ts.Node | undefined {
@@ -111,10 +132,10 @@ export class Visitor {
     }
     if (ts.isImportSpecifier(node)) {
       const tpe = this.checker.getTypeAtLocation(node)
-      for (const declaration of tpe.symbol.declarations || []) {
-        console.log({
-          tpe: declaration.getSourceFile().fileName,
-        })
+      for (const declaration of tpe.symbol?.declarations || []) {
+        // console.log({
+        //   tpe: declaration.getSourceFile().fileName,
+        // })
         return this.lsifSymbol(declaration)
       }
     }
@@ -130,21 +151,11 @@ export class Visitor {
   private newLocalSymbol(node: ts.Node): LsifSymbol {
     const symbol = LsifSymbol.local(this.localCounter.next())
     this.localSymbolTable.set(node, symbol)
-    this.addSymbolInformation(node, symbol)
     return symbol
   }
   private cached(node: ts.Node, symbol: LsifSymbol): LsifSymbol {
     this.globalSymbolTable.set(node, symbol)
-    this.addSymbolInformation(node, symbol)
     return symbol
-  }
-  private addSymbolInformation(node: ts.Node, symbol: LsifSymbol): void {
-    this.doc.symbols.push(
-      new lsif_typed.SymbolInformation({
-        symbol: symbol.value,
-        documentation: [node.getText()],
-      })
-    )
   }
   private descriptor(node: ts.Node): Descriptor | undefined {
     if (ts.isInterfaceDeclaration(node) || ts.isEnumDeclaration(node)) {
@@ -199,5 +210,5 @@ function isAnonymousContainerOfSymbols(node: ts.Node): boolean {
 }
 
 function debug(node: ts.Node): void {
-  console.log({ kind: ts.SyntaxKind[node.kind], text: node.getText() })
+  // console.log({ kind: ts.SyntaxKind[node.kind], text: node.getText() })
 }

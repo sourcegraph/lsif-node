@@ -34,6 +34,10 @@ export class Indexer {
         }),
       })
     )
+    const sourceFiles = this.program.getSourceFiles()
+    if (sourceFiles.length === 0) {
+      throw new Error('No source files')
+    }
     // Visit every sourceFile in the program
     for (const sourceFile of this.program.getSourceFiles()) {
       const includes = this.config.fileNames.includes(sourceFile.fileName)

@@ -1,4 +1,5 @@
 import * as path from 'path'
+import * as fs from 'fs'
 import * as ts from 'typescript'
 import * as yargs from 'yargs'
 import * as lsif from './lsif'
@@ -35,14 +36,24 @@ export function main(): void {
           default: '.',
           describe: 'the directory to index',
         })
+        yargs.option('output', {
+          type: 'string',
+          default: 'dump.lsif-typed',
+          describe: 'path to the output file',
+        })
       },
       argv => {
-        index({
-          project: argv.project as string,
-          writeIndex: (index): void => {
-            console.log(index)
-          },
-        })
+        const output = fs.openSync(argv.output as string, 'w')
+        try {
+          index({
+            project: argv.project as string,
+            writeIndex: (index): void => {
+              fs.writeSync(output, index.serializeBinary())
+            },
+          })
+        } finally {
+          fs.close(output)
+        }
       }
     )
     .help().argv
@@ -58,8 +69,9 @@ export function index(options: Options): void {
   // console.log({ project: argv.project, args: ts.sys.args });
   let config = ts.parseCommandLine(
     ['-p', options.project],
+    // tslint:disable-next-line: arrow-return-shorthand
     (relativePath: string) => {
-      console.log({ relativePath })
+      // console.log({ relativePath })
       return path.resolve(options.project, relativePath)
     }
   )
@@ -78,7 +90,7 @@ export function index(options: Options): void {
     config = loadConfigFile(tsconfigFileName)
   }
 
-  // console.log({ tsconfigFileName });
+  // console.log({ tsconfigFileName })
 
   if (config.fileNames.length === 0) {
     console.error(`no input files`)

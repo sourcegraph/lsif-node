@@ -17,7 +17,10 @@ export class Packages {
     }
     const packageJsonPath = path.join(filePath, 'package.json')
     try {
-      if (fs.existsSync(packageJsonPath)) {
+      if (
+        fs.existsSync(packageJsonPath) &&
+        fs.lstatSync(packageJsonPath).isFile()
+      ) {
         const packageJsonText = fs.readFileSync(packageJsonPath).toString()
         const packageJson = JSON.parse(packageJsonText)
         const name = packageJson.name
