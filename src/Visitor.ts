@@ -30,20 +30,36 @@ export class Visitor {
       if (isDefinition) {
         role |= lsif_typed.SymbolRole.Definition
       }
-      const range = Range.fromNode(node)
+      const range = Range.fromNode(node).toLsif()
       const sym = this.checker.getSymbolAtLocation(node)
       if (sym) {
         for (const declaration of sym?.declarations || []) {
           const lsifSymbol = this.lsifSymbol(declaration)
           this.doc.occurrences.push(
             new lsif.lib.codeintel.lsif_typed.Occurrence({
-              range: range.toLsif(),
+              range,
               symbol: lsifSymbol.value,
               symbol_roles: role,
             })
           )
           if (isDefinition) {
             this.addSymbolInformation(node, sym, lsifSymbol)
+            if (
+              declaration.kind === ts.SyntaxKind.ShorthandPropertyAssignment
+            ) {
+              const valueSymbol =
+                this.checker.getShorthandAssignmentValueSymbol(declaration)
+              if (valueSymbol) {
+                for (const symbol of valueSymbol?.declarations || []) {
+                  this.doc.occurrences.push(
+                    new lsif.lib.codeintel.lsif_typed.Occurrence({
+                      range,
+                      symbol: this.lsifSymbol(symbol).value,
+                    })
+                  )
+                }
+              }
+            }
           }
         }
       }
@@ -60,7 +76,9 @@ export class Visitor {
       new lsif_typed.SymbolInformation({
         symbol: symbol.value,
         documentation: [
-          this.checker.typeToString(this.checker.getTypeAtLocation(node)),
+          '```ts\n' +
+            this.checker.typeToString(this.checker.getTypeAtLocation(node)) +
+            '\n```',
           ts.displayPartsToString(sym.getDocumentationComment(this.checker)),
         ],
       })

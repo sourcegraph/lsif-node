@@ -1,6 +1,5 @@
 import * as fs from 'fs'
 import * as process from 'process'
-import * as url from 'url'
 import { join } from 'path'
 import { index as lsifIndex } from './main'
 import { Range } from './Range'
@@ -44,16 +43,13 @@ for (const snapshotDirectory of snapshotDirectories) {
       index.serializeBinary()
     )
     for (const document of index.documents) {
-      const inputPath = path.join(
-        index.metadata.project_root,
-        document.relative_path
-      )
+      const inputPath = path.join(projectRoot, document.relative_path)
       const relativeToInputDir = path.relative(inputDir, inputPath)
       const outputPath = path.resolve(outputDir, relativeToInputDir)
       const expected: string = fs.existsSync(outputPath)
         ? fs.readFileSync(outputPath).toString()
         : ''
-      const input = Input.fromFile(url.fileURLToPath(inputPath))
+      const input = Input.fromFile(inputPath)
       const obtained = formatSnapshot(input, document)
       if (obtained !== expected) {
         if (isUpdate) {
