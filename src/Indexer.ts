@@ -25,7 +25,7 @@ export class Indexer {
     this.options.writeIndex(
       new lsif_typed.Index({
         metadata: new lsif_typed.Metadata({
-          project_root: url.pathToFileURL(this.options.project).toString(),
+          project_root: url.pathToFileURL(this.options.projectRoot).toString(),
           tool_info: new lsif_typed.ToolInfo({
             name: 'lsif-node',
             version: '1.0.0',

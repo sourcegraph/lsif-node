@@ -28,6 +28,7 @@ for (const snapshotDirectory of snapshotDirectories) {
     const index = new lsif.lib.codeintel.lsif_typed.Index()
     const projectRoot = join(inputDir, snapshotDirectory)
     lsifIndex({
+      projectRoot,
       project: projectRoot,
       writeIndex: partialIndex => {
         if (partialIndex.metadata) {

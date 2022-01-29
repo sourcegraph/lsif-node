@@ -1,3 +1,4 @@
+import * as child_process from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as ts from 'typescript'
@@ -18,6 +19,7 @@ export interface DocEntry {
 }
 
 export interface Options {
+  projectRoot: string
   project: string
   writeIndex: (index: lsif.lib.codeintel.lsif_typed.Index) => void
 }
@@ -36,6 +38,11 @@ export function main(): void {
           default: '.',
           describe: 'the directory to index',
         })
+        yargs.option('useYarnWorkspaces', {
+          type: 'boolean',
+          default: 'false',
+          describe: 'whether to index all yarn workspaces',
+        })
         yargs.option('output', {
           type: 'string',
           default: 'dump.lsif-typed',
@@ -43,20 +50,40 @@ export function main(): void {
         })
       },
       argv => {
+        const dir = argv.project as string
+        const projects: string[] = argv.useYarnWorkspaces
+          ? yarnWorkspaces(dir)
+          : [dir]
         const output = fs.openSync(argv.output as string, 'w')
         try {
-          index({
-            project: argv.project as string,
-            writeIndex: (index): void => {
-              fs.writeSync(output, index.serializeBinary())
-            },
-          })
+          for (const project of projects) {
+            index({
+              projectRoot: dir,
+              project: project,
+              writeIndex: (index): void => {
+                fs.writeSync(output, index.serializeBinary())
+              },
+            })
+          }
         } finally {
           fs.close(output)
         }
       }
     )
     .help().argv
+}
+
+function yarnWorkspaces(dir: string): string[] {
+  const json = JSON.parse(
+    child_process.execSync('yarn workspaces info', { cwd: dir }).toString()
+  )
+  const result: string[] = []
+  for (const key of Object.keys(json)) {
+    if (json[key]['location'] !== undefined) {
+      result.push(json[key]['location'])
+    }
+  }
+  return result
 }
 
 export function indexToOutputFile(project: string, output: string): void {
