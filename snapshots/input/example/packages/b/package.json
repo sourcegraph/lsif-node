@@ -1,5 +1,5 @@
 {
-  "name": "b",
+  "name": "@example/b",
   "version": "1.0.0",
   "description": "Example TS/JS project",
   "main": "src/main.js",
