@@ -59,7 +59,7 @@ export function main(): void {
           for (const project of projects) {
             index({
               projectRoot: dir,
-              project: project,
+              project,
               writeIndex: (index): void => {
                 fs.writeSync(output, index.serializeBinary())
               },
@@ -75,12 +75,19 @@ export function main(): void {
 
 function yarnWorkspaces(dir: string): string[] {
   const json = JSON.parse(
-    child_process.execSync('yarn workspaces info', { cwd: dir }).toString()
+    JSON.parse(
+      child_process.execSync('yarn --silent --json workspaces info', {
+        cwd: dir,
+        encoding: 'utf-8',
+      })
+    ).data
   )
+
   const result: string[] = []
   for (const key of Object.keys(json)) {
-    if (json[key]['location'] !== undefined) {
-      result.push(json[key]['location'])
+    const location = 'location'
+    if (json[key][location] !== undefined) {
+      result.push(json[key][location])
     }
   }
   return result
@@ -111,8 +118,10 @@ export function index(options: Options): void {
       tsconfigFileName = projectPath
     }
     if (!ts.sys.fileExists(tsconfigFileName)) {
-      console.error(`no such file: ${tsconfigFileName}`)
-      process.exitCode = 1
+      console.error(
+        `skipping project '${options.project}' because it's missing tsconfig.json (expected at ${tsconfigFileName})`
+      )
+      return
     }
     config = loadConfigFile(tsconfigFileName)
   }

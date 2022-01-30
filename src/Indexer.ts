@@ -44,7 +44,7 @@ export class Indexer {
       if (includes) {
         const doc = new lsif.lib.codeintel.lsif_typed.Document({
           relative_path: path.relative(
-            this.options.project,
+            this.options.projectRoot,
             sourceFile.fileName
           ),
           occurrences: [],
