@@ -146,10 +146,10 @@ function listDirsRecursive(dir: string, matchingName: string): string[] {
   let paths: string[] = []
   const loop = (subdir: string) => {
     for (const basename of fs.readdirSync(subdir)) { 
-      const absPath = path.join(dir, basename)
+      const absPath = path.join(subdir, basename)
       const stat = fs.statSync(absPath)
       if (stat.isFile() && basename === matchingName) {
-        paths.push(absPath)
+        paths.push(subdir)
       } else if (stat.isDirectory()) {
         loop(absPath)
       }
@@ -197,7 +197,20 @@ async function processProject(
           process.exitCode = 1;
           return undefined
         }
+        const shouldSkipPath = (p: string): boolean => {
+          if (path.basename(p) === "node_modules") {
+            return true;
+          }
+          const dir = path.dirname(p)
+          if (dir === p) {
+            return false;
+          }
+          return shouldSkipPath(dir)
+        }
         for (const dir of jsonDirs) {
+          if (shouldSkipPath(dir)) {
+            continue;
+          }
           createTSConfigAndEmitLSIF(dir);
         }
         process.exit(0);
