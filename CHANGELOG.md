@@ -1,5 +1,13 @@
 ## LSIF Node
 
+### v0.7.5 (2022/02/01 12:13 +00:00)
+- [#193](https://github.com/sourcegraph/lsif-node/pull/193) Fix bugs in implementation of --inferTSConfig. (#193) (@varungandhi-src)
+- [#184](https://github.com/sourcegraph/lsif-node/pull/184) Implement --inferTSConfig flag. (#184) (@varungandhi-src)
+- [#183](https://github.com/sourcegraph/lsif-node/pull/183) Add flag for inferring tsconfig.json files. (#183) (@varungandhi-src)
+- [#180](https://github.com/sourcegraph/lsif-node/pull/180) Update dependency prettier to v2.5.1 (#180) (@renovate[bot])
+- [#179](https://github.com/sourcegraph/lsif-node/pull/179) Update dependency prettier to v2.5.0 (#179) (@renovate[bot])
+- [#178](https://github.com/sourcegraph/lsif-node/pull/178) Update dependency @sourcegraph/eslint-config to v0.26.0 (#178) (@renovate[bot])
+
 ### v0.7.3 (2021/10/12 11:34 +00:00)
 - [#174](https://github.com/sourcegraph/lsif-node/pull/174) Update release workflow to latest GitHub Actions syntax (#174) (@olafurpg)
 - [#171](https://github.com/sourcegraph/lsif-node/pull/171) Update dependency prettier to v2.4.1 (#171) (@renovate[bot])
