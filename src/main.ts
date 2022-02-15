@@ -139,26 +139,6 @@ function createIdGenerator(): () => Id {
   }
 }
 
-/** Returns the list of directory paths under dir which contain a file
-  * with name matchingName.
-*/
-function listDirsRecursive(dir: string, matchingName: string): string[] {
-  let paths: string[] = []
-  const loop = (subdir: string) => {
-    for (const basename of fs.readdirSync(subdir)) { 
-      const absPath = path.join(subdir, basename)
-      const stat = fs.statSync(absPath)
-      if (stat.isFile() && basename === matchingName) {
-        paths.push(subdir)
-      } else if (stat.isDirectory()) {
-        loop(absPath)
-      }
-    }
-  }
-  loop(dir)
-  return paths
-}
-
 function createTSConfigAndEmitLSIF(dir: string): void {
   // TypeScript packages on NPM are commonly distributed without a
   // tsconfig.json file. Instead of skipping indexing altogether,
@@ -168,7 +148,7 @@ function createTSConfigAndEmitLSIF(dir: string): void {
   const index = newArgv.indexOf("--inferTSConfig")
   console.assert(index > -1, "Expected --inferTSConfig to be in argv")
   newArgv.splice(index, 1)
-  child_process.execSync(newArgv.join(" "))
+  child_process.execSync(newArgv.join(" "), { cwd: dir })
 }
 
 async function processProject(
@@ -191,28 +171,25 @@ async function processProject(
     }
     if (!ts.sys.fileExists(tsconfigFileName)) {
       if (options.inferTSConfig) {
-        const jsonDirs = listDirsRecursive(projectPath, "package.json");
-        if (jsonDirs.length == 0) {
-          console.error(`Failed to infer tsconfig.json for project.`);
-          process.exitCode = 1;
-          return undefined
+        // We only need to generate a single LSIF dump in the project
+        // root. So it makes sense to create only a single tsconfig.json
+        // at the root (instead of creating one per subdirectory which contains
+        // package.json).
+        //
+        // Since the inferTSConfig flag is only intended to be used with
+        // NPM packages, we should have a package.json file at the root.
+        // 
+        // However, in some cases, there may be nested package.json files
+        // as well. For example, https://www.npmjs.com/package/form-data-encoder
+        // ships with a root level package.json file and two further
+        // package.json files in subdirectories for ESM and CJS.
+        // In its case, generating more tsconfig.json files (and hence
+        // more LSIF dumps) is not useful, because there is only one
+        // LSIF dump to be generated.
+        if (!fs.existsSync(path.join(projectPath, 'package.json'))) {
+          console.warn("missing package.json at project root " + projectPath)
         }
-        const shouldSkipPath = (p: string): boolean => {
-          if (path.basename(p) === "node_modules") {
-            return true;
-          }
-          const dir = path.dirname(p)
-          if (dir === p) {
-            return false;
-          }
-          return shouldSkipPath(dir)
-        }
-        for (const dir of jsonDirs) {
-          if (shouldSkipPath(dir)) {
-            continue;
-          }
-          createTSConfigAndEmitLSIF(dir);
-        }
+        createTSConfigAndEmitLSIF(projectPath);
         process.exit(0);
       } else {
         console.error(
