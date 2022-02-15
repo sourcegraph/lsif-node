@@ -1,5 +1,9 @@
 ## LSIF Node
 
+### v0.7.6 (2022/02/15 10:26 +00:00)
+- [#197](https://github.com/sourcegraph/lsif-node/pull/197) Simplify implementation of --inferTSConfig. (#197) (@varungandhi-src)
+- [#196](https://github.com/sourcegraph/lsif-node/pull/196) Empty commit for creating Docker image using v0.7.5. (#196) (@varungandhi-src)
+
 ### v0.7.5 (2022/02/01 12:13 +00:00)
 - [#193](https://github.com/sourcegraph/lsif-node/pull/193) Fix bugs in implementation of --inferTSConfig. (#193) (@varungandhi-src)
 - [#184](https://github.com/sourcegraph/lsif-node/pull/184) Implement --inferTSConfig flag. (#184) (@varungandhi-src)
