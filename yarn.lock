@@ -4878,10 +4878,10 @@ typedarray@^0.0.6:
   resolved "https://github.com/dbaeumer/TypeScript/releases/download/4.4.0-beta-lsif.1/lsif-typescript-4.4.0-beta-lsif.1.tgz"
   integrity sha512-vKuGD35qrAfdkAuGIcnk903wzOyuK+ONVyX8oyM017pOWtaKjK4ecpKwIWO/PNAE7yx53FNb30sbOiV+VIVh9A==
 
-typescript@^3.8.3:
-  version "3.9.7"
-  resolved "https://registry.npmjs.org/typescript/-/typescript-3.9.7.tgz"
-  integrity sha512-BLbiRkiBzAwsjut4x/dsibSTB6yWpwT5qWmC2OfuCg3GgVQCSgMs4vEctYPhsaGtd0AeuuHMkjZ2h2WG8MSzRw==
+typescript@^3.9.10:
+  version "3.9.10"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.9.10.tgz#70f3910ac7a51ed6bef79da7800690b19bf778b8"
+  integrity sha512-w6fIxVE/H1PkLKcCPsFqKE7Kv7QUwhU8qQY2MueZXWx5cPZdwFupLgKK3vntcK98BtNHZtAF4LA/yl2a7k8R6Q==
 
 uid-number@0.0.6:
   version "0.0.6"
